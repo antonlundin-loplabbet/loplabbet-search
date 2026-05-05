@@ -150,7 +150,8 @@ function mergeProducts(prisjaktGroups, noselakeMap) {
       product.popularity = parseFloat(nl.popularity ?? "0") || 0;
 
       // Dynamiska facetter (Drop, Stabilitet, Dämpning, Läst)
-      const facets = nl.dynamic_facets ?? [];
+      const rawFacets = nl.dynamic_facets ?? [];
+      const facets = Array.isArray(rawFacets) ? rawFacets : [rawFacets];
       for (const f of facets) {
         switch (f.filterkey) {
           case "Drop":
