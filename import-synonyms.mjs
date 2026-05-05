@@ -12,7 +12,7 @@
 import { readFileSync } from "fs";
 
 const HOST = process.env.TYPESENSE_HOST;
-const API_KEY = process.env.TYPESENSE_API_KEY;
+const API_KEY = process.env.TYPESENSE_ADMIN_KEY;
 const COLLECTION = process.env.TYPESENSE_COLLECTION || "products";
 
 if (!HOST || !API_KEY) {
