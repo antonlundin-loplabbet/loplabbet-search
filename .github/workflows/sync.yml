@@ -1,0 +1,33 @@
+name: Sync produkter till Typesense
+
+on:
+  # Kör varje natt kl 03:00 svensk tid (01:00 UTC)
+  schedule:
+    - cron: "0 1 * * *"
+
+  # Tillåt manuell körning från GitHub UI
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Hämta feeds och synka
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checka ut repo
+        uses: actions/checkout@v4
+
+      - name: Installera Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installera beroenden
+        run: npm ci
+
+      - name: Kör sync
+        env:
+          TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
+          TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
+        run: node sync.mjs

@@ -1,0 +1,431 @@
+[
+  // ─── VARUMÄRKEN – stavningsvarianter & smeknamn ───────────────────────────
+
+  {
+    "id": "brand-hoka",
+    "synonyms": ["hoka", "hooka", "hoka one one", "hoka oneone", "hokaoneone"]
+  },
+  {
+    "id": "brand-asics",
+    "synonyms": ["asics", "asix", "assics", "asiks", "asikcs"]
+  },
+  {
+    "id": "brand-saucony",
+    "synonyms": ["saucony", "sauconi", "sacony", "saukony", "saukoni", "saicony"]
+  },
+  {
+    "id": "brand-salomon",
+    "synonyms": ["salomon", "salmon", "salamone", "salomont", "salomoon"]
+  },
+  {
+    "id": "brand-newbalance",
+    "synonyms": ["new balance", "newbalance", "nb", "new balanse", "newbalans"]
+  },
+  {
+    "id": "brand-brooks",
+    "synonyms": ["brooks", "brook", "broks", "brookss"]
+  },
+  {
+    "id": "brand-on",
+    "synonyms": ["on running", "on", "on cloud", "on cloudsurfer", "onrunning"]
+  },
+  {
+    "id": "brand-mizuno",
+    "synonyms": ["mizuno", "misuno", "mizono", "mitsuno", "mizumo"]
+  },
+  {
+    "id": "brand-garmin",
+    "synonyms": ["garmin", "garming", "garmen", "garman", "garminn"]
+  },
+  {
+    "id": "brand-suunto",
+    "synonyms": ["suunto", "sunto", "suuntoo", "sunton", "suunton"]
+  },
+  {
+    "id": "brand-coros",
+    "synonyms": ["coros", "coross", "corros", "koros", "corus"]
+  },
+  {
+    "id": "brand-polar",
+    "synonyms": ["polar", "pola", "pollar"]
+  },
+  {
+    "id": "brand-maurten",
+    "synonyms": ["maurten", "maurtén", "mortan", "morten", "maurthen", "maruten"]
+  },
+  {
+    "id": "brand-inov8",
+    "synonyms": ["inov-8", "inov8", "inov 8", "inovik"]
+  },
+  {
+    "id": "brand-puma",
+    "synonyms": ["puma", "pumma", "pyma"]
+  },
+  {
+    "id": "brand-nike",
+    "synonyms": ["nike", "naike", "nikee", "niké"]
+  },
+  {
+    "id": "brand-adidas",
+    "synonyms": ["adidas", "addidas", "adiddas", "adidass"]
+  },
+  {
+    "id": "brand-reebok",
+    "synonyms": ["reebok", "rebok", "rebook", "ribok"]
+  },
+  {
+    "id": "brand-north-face",
+    "synonyms": ["the north face", "north face", "tnf", "northface"]
+  },
+  {
+    "id": "brand-vj",
+    "synonyms": ["vj", "vj sport", "vjsport"]
+  },
+  {
+    "id": "brand-saysky",
+    "synonyms": ["saysky", "say sky", "sasky", "sayski"]
+  },
+  {
+    "id": "brand-topo",
+    "synonyms": ["topo", "topo athletic", "topoathletic"]
+  },
+  {
+    "id": "brand-2xu",
+    "synonyms": ["2xu", "2 xu", "2 x u", "two xu"]
+  },
+  {
+    "id": "brand-strumor-craft",
+    "synonyms": ["craft", "crraft", "craf"]
+  },
+
+  // ─── SKOMODELLER – vanliga sökvarianter ───────────────────────────────────
+
+  {
+    "id": "model-gel-kayano",
+    "synonyms": ["gel kayano", "gel-kayano", "kayano", "gelkayano"]
+  },
+  {
+    "id": "model-gel-nimbus",
+    "synonyms": ["gel nimbus", "gel-nimbus", "nimbus", "gelnimbus"]
+  },
+  {
+    "id": "model-gel-cumulus",
+    "synonyms": ["gel cumulus", "gel-cumulus", "cumulus", "gelcumulus"]
+  },
+  {
+    "id": "model-metaspeed",
+    "synonyms": ["metaspeed", "meta speed", "meta:speed", "metaspeed sky", "metaspeed edge"]
+  },
+  {
+    "id": "model-superblast",
+    "synonyms": ["superblast", "super blast", "superblastt"]
+  },
+  {
+    "id": "model-vaporfly",
+    "synonyms": ["vaporfly", "vapor fly", "vaporflye", "vapor fly next"]
+  },
+  {
+    "id": "model-alphafly",
+    "synonyms": ["alphafly", "alpha fly", "alphaflye"]
+  },
+  {
+    "id": "model-pegasus",
+    "synonyms": ["pegasus", "pegasos", "pegusus", "pegasis", "air pegasus"]
+  },
+  {
+    "id": "model-wave-rider",
+    "synonyms": ["wave rider", "wave-rider", "waverider", "waverider mizuno"]
+  },
+  {
+    "id": "model-adrenaline",
+    "synonyms": ["adrenaline", "adrenalinn", "adrenalin", "adrenaline gts"]
+  },
+  {
+    "id": "model-ghost",
+    "synonyms": ["ghost", "ghost brooks", "brooks ghost"]
+  },
+  {
+    "id": "model-clifton",
+    "synonyms": ["clifton", "hoka clifton", "cliffton"]
+  },
+  {
+    "id": "model-bondi",
+    "synonyms": ["bondi", "hoka bondi", "bondii"]
+  },
+  {
+    "id": "model-speedgoat",
+    "synonyms": ["speedgoat", "speed goat", "speedgoot", "speed goat hoka"]
+  },
+  {
+    "id": "model-endorphin",
+    "synonyms": ["endorphin", "endorfin", "endorphine", "endorphin pro", "endorphin speed"]
+  },
+  {
+    "id": "model-kinvara",
+    "synonyms": ["kinvara", "kinvarra", "kinvara saucony"]
+  },
+
+  // ─── PRODUKTKATEGORIER – svenska & engelska ────────────────────────────────
+
+  {
+    "id": "cat-loparskor",
+    "synonyms": ["löparskor", "löpsko", "springsko", "springskor", "joggingskor", "löpningsskor", "löpskor", "running shoes", "running shoe"]
+  },
+  {
+    "id": "cat-trailskor",
+    "synonyms": ["trailskor", "trailsko", "terrängsko", "terrängskor", "trail shoes", "offroad skor"]
+  },
+  {
+    "id": "cat-klocka",
+    "synonyms": ["klocka", "gps-klocka", "löparklocka", "sportklocka", "träningsklocka", "smartwatch", "gps klocka", "pulsklocka", "multisportklocka"]
+  },
+  {
+    "id": "cat-pulsband",
+    "synonyms": ["pulsband", "hrm", "pulsmätare", "hjärtfrekvensmätare", "bröstband", "heart rate monitor", "pulsbälte"]
+  },
+  {
+    "id": "cat-tights",
+    "synonyms": ["tights", "löpartights", "kompression", "kompressionstights", "löparbyxor", "löpbyxor", "långkalsonger", "träningsbyxor", "running tights"]
+  },
+  {
+    "id": "cat-jacka",
+    "synonyms": ["jacka", "löparjacka", "vindjacka", "regnrock", "regnjacka", "vindtät jacka", "träningsjacka", "running jacket"]
+  },
+  {
+    "id": "cat-tshirt",
+    "synonyms": ["t-shirt", "tshirt", "löpar-t-shirt", "löpartröja", "tränings-t-shirt", "funktionsshirt", "tröja", "kortärmad tröja"]
+  },
+  {
+    "id": "cat-ryggsack",
+    "synonyms": ["ryggsäck", "löparryggsäck", "hydration vest", "löparväst", "trailväst", "vätskebälte", "running vest", "vest ryggsäck"]
+  },
+  {
+    "id": "cat-strumpor",
+    "synonyms": ["strumpor", "löparstrumpor", "sportsockor", "sockor", "kompressionsstrumpor", "running socks"]
+  },
+  {
+    "id": "cat-keps",
+    "synonyms": ["keps", "löparkeps", "cap", "löparmössa", "mössa", "pannband", "headband", "löpar keps"]
+  },
+  {
+    "id": "cat-handskar",
+    "synonyms": ["handskar", "löparhandskar", "träningshandskar", "running gloves", "sporthandskar"]
+  },
+  {
+    "id": "cat-shorts",
+    "synonyms": ["shorts", "löparshorts", "träningsshorts", "running shorts", "löp shorts"]
+  },
+  {
+    "id": "cat-pannlampa",
+    "synonyms": ["pannlampa", "löparlampa", "headlamp", "stirnlampe", "pannlykt", "pannlykta"]
+  },
+  {
+    "id": "cat-solglasogon",
+    "synonyms": ["solglasögon", "löparglasögon", "sportglasögon", "löparsolglasögon", "running glasses"]
+  },
+
+  // ─── NUTRITION ─────────────────────────────────────────────────────────────
+
+  {
+    "id": "nutr-gel",
+    "synonyms": ["gel", "energigel", "löpargel", "kolhydratgel", "sportgel", "energy gel", "running gel"]
+  },
+  {
+    "id": "nutr-sportdryck",
+    "synonyms": ["sportdryck", "isoton", "elektrolytdryck", "energidryck", "sportdrink", "iso", "isodrink", "vätskeersättning"]
+  },
+  {
+    "id": "nutr-bar",
+    "synonyms": ["bar", "energibar", "kolhydratbar", "sportbar", "löparbar", "energy bar"]
+  },
+  {
+    "id": "nutr-bikarbonat",
+    "synonyms": ["bikarbonat", "bicarb", "nahco3", "maurten bicarb", "bikarbonatsystem", "natriumbikarbkarbid"]
+  },
+  {
+    "id": "nutr-koffein",
+    "synonyms": ["koffein", "caffeine", "koffeingel", "caffeine gel"]
+  },
+  {
+    "id": "nutr-elektrolyter",
+    "synonyms": ["elektrolyter", "salt", "saltkapsel", "elektrolytkapsel", "saltpiller", "natriumkapsel"]
+  },
+  {
+    "id": "nutr-kolhydrater",
+    "synonyms": ["kolhydrater", "carbs", "kolhydrat", "carbohydrates"]
+  },
+  {
+    "id": "nutr-protein",
+    "synonyms": ["protein", "proteinpulver", "återhämtningsdrink", "recovery drink", "whey"]
+  },
+
+  // ─── LÖPNING – distanser & träningstyper ──────────────────────────────────
+
+  {
+    "id": "run-maraton",
+    "synonyms": ["maraton", "marathon", "42km", "42 km", "42,2 km", "långlopp"]
+  },
+  {
+    "id": "run-halvmaraton",
+    "synonyms": ["halvmaraton", "halfmarathon", "21km", "21 km", "halvmara", "halva"]
+  },
+  {
+    "id": "run-10k",
+    "synonyms": ["10k", "10km", "10 km", "tiokilometerslopp", "tio kilometer"]
+  },
+  {
+    "id": "run-ultra",
+    "synonyms": ["ultra", "ultralöpning", "ultramarathon", "ultralöp", "ultralopp"]
+  },
+  {
+    "id": "run-trail",
+    "synonyms": ["trail", "terräng", "offroad", "stiglöpning", "cross", "terränglopp", "traillöpning"]
+  },
+  {
+    "id": "run-intervall",
+    "synonyms": ["intervaller", "fartlek", "tempoträning", "snabbträning", "intervallträning", "tempo"]
+  },
+  {
+    "id": "run-återhämtning",
+    "synonyms": ["återhämtning", "recovery", "vila", "restitution", "lugn löpning", "lätt löpning"]
+  },
+  {
+    "id": "run-tävling",
+    "synonyms": ["tävling", "race", "lopp", "tävlingssko", "tävlingsko", "racingsko"]
+  },
+
+  // ─── SKOTEKNIK – dämpning, stabilitet, material ───────────────────────────
+
+  {
+    "id": "tech-dampning",
+    "synonyms": ["dämpning", "stötdämpning", "cushioning", "mjukt", "dämpat", "mjuk sula", "maximal dämpning"]
+  },
+  {
+    "id": "tech-stabilitet",
+    "synonyms": ["stabilitet", "stability", "pronationsstöd", "stöd", "motionkontroll", "motion control", "kontroll"]
+  },
+  {
+    "id": "tech-neutral",
+    "synonyms": ["neutral", "neutralt", "neutral löpning", "neutral sko", "neutral löpare"]
+  },
+  {
+    "id": "tech-pronation",
+    "synonyms": ["pronation", "överpronation", "overpronation", "pronerar", "inåtpronation", "pronationsproblem"]
+  },
+  {
+    "id": "tech-supination",
+    "synonyms": ["supination", "underpronation", "supinerar", "utåtpronation"]
+  },
+  {
+    "id": "tech-carbon",
+    "synonyms": ["carbon", "kolfiber", "kolfiberplatta", "carbonplatta", "kolplatta", "carbon plate", "kol", "kolplattsko"]
+  },
+  {
+    "id": "tech-goretex",
+    "synonyms": ["gore-tex", "goretex", "gtx", "gore tex", "vattentät", "vattenavvisande", "waterproof", "regntät"]
+  },
+  {
+    "id": "tech-drop",
+    "synonyms": ["drop", "fallhöjd", "häl-till-tå-drop", "zero drop", "låg drop", "hög drop", "heel-to-toe"]
+  },
+  {
+    "id": "tech-stack",
+    "synonyms": ["stack", "stackhöjd", "sulhöjd", "stack height", "maximal stack"]
+  },
+  {
+    "id": "tech-rocker",
+    "synonyms": ["rocker", "rocker-geometri", "rockersulor", "välvd sula", "rocking sole"]
+  },
+  {
+    "id": "tech-plattfot",
+    "synonyms": ["plattfot", "platta fötter", "lågt fotvalv", "flat foot", "flatfoot", "sänkt valv"]
+  },
+  {
+    "id": "tech-hogafotvalv",
+    "synonyms": ["högt fotvalv", "cavusfot", "högt valv", "high arch"]
+  },
+
+  // ─── SKADOR & BESVÄR ───────────────────────────────────────────────────────
+
+  {
+    "id": "injury-knee",
+    "synonyms": ["löparknä", "itbs", "iliotibialband", "knäsmärta", "knäont", "knäproblem", "runners knee"]
+  },
+  {
+    "id": "injury-plantar",
+    "synonyms": ["plantar fasciit", "hälsporre", "hälsmärta", "hälont", "plantar fascitis", "plantarfasciit"]
+  },
+  {
+    "id": "injury-achilles",
+    "synonyms": ["achilles", "akillessena", "hälsena", "achillestendinit", "achillesbesvär", "akillesont"]
+  },
+  {
+    "id": "injury-shin",
+    "synonyms": ["benhinneinflammation", "shin splints", "periostit", "skenbensont", "skenben"]
+  },
+  {
+    "id": "injury-stress",
+    "synonyms": ["stressfraktur", "utmattningsfraktur", "stress fracture"]
+  },
+
+  // ─── TEKNIKTILLBEHÖR & GPS ─────────────────────────────────────────────────
+
+  {
+    "id": "tech-gps",
+    "synonyms": ["gps", "gps-klocka", "gps watch", "gpsklocka", "löpar-gps", "sat nav klocka"]
+  },
+  {
+    "id": "tech-vo2max",
+    "synonyms": ["vo2max", "vo2 max", "maximal syreupptagning", "kondition", "syreupptagningsförmåga"]
+  },
+  {
+    "id": "tech-cadence",
+    "synonyms": ["kadens", "cadence", "stegfrekvens", "steglängd", "löpkadence"]
+  },
+  {
+    "id": "tech-foam-roller",
+    "synonyms": ["foam roller", "skumrulle", "massagerulle", "foam roll", "skumrullare", "triggerpunktsrulle"]
+  },
+  {
+    "id": "tech-loptband",
+    "synonyms": ["löpband", "treadmill", "running machine", "motionsband"]
+  },
+
+  // ─── KÖN & PASSFORM ────────────────────────────────────────────────────────
+
+  {
+    "id": "gender-dam",
+    "synonyms": ["dam", "dam-", "kvinna", "kvinnor", "women", "ladies", "ladies running", "women's"]
+  },
+  {
+    "id": "gender-herr",
+    "synonyms": ["herr", "herr-", "man", "män", "men", "men's", "herre"]
+  },
+  {
+    "id": "gender-unisex",
+    "synonyms": ["unisex", "könsneutral", "båda kön", "herr och dam"]
+  },
+
+  // ─── EPiServer-synonymer (befintliga från er CMS-konfig) ──────────────────
+
+  {
+    "id": "cms-trail",
+    "root": "trail",
+    "synonyms": ["terräng"]
+  },
+  {
+    "id": "cms-hooka",
+    "root": "hooka",
+    "synonyms": ["hoka one one"]
+  },
+  {
+    "id": "cms-setsu",
+    "root": "setsu",
+    "synonyms": ["fujisetsu"]
+  },
+  {
+    "id": "cms-pulsband",
+    "root": "pulsband",
+    "synonyms": ["hrm"]
+  }
+]
