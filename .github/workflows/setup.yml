@@ -24,7 +24,7 @@ jobs:
           cache: "npm"
 
       - name: Installera beroenden (npm install)
-        run: npm ci
+        run: npm install
 
       - name: Skapa Typesense-kollektion
         env:
