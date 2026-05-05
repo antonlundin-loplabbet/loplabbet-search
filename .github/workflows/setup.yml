@@ -1,0 +1,46 @@
+name: Setup – Skapa kollektion och synka första gången
+
+on:
+  workflow_dispatch:
+    inputs:
+      recreate_collection:
+        description: "Radera och återskapa kollektionen? (ja/nej)"
+        required: false
+        default: "nej"
+
+jobs:
+  setup:
+    name: Skapa kollektion + importera synonymer + synka
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checka ut repo
+        uses: actions/checkout@v4
+
+      - name: Installera Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installera beroenden (npm install)
+        run: npm ci
+
+      - name: Skapa Typesense-kollektion
+        env:
+          TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
+          TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
+          RECREATE: ${{ github.event.inputs.recreate_collection == 'ja' && 'true' || 'false' }}
+        run: node create-collection.mjs
+
+      - name: Importera synonymer
+        env:
+          TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
+          TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
+        run: node import-synonyms.mjs
+
+      - name: Synka produkter från Prisjakt + Noselake
+        env:
+          TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
+          TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
+        run: node sync.mjs
