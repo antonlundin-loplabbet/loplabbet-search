@@ -1,7 +1,7 @@
 /**
- * sync-pages.mjs
- * Hämtar loplabbet.se sitemap, fetchar varje sida, extraherar innehåll
- * och synkar till Typesense "pages"-kollektionen.
+ * sync-pages.mjs (v2)
+ * Hämtar loplabbet.se sitemap, filtrerar bort produktsidor,
+ * extraherar innehåll och synkar till Typesense "pages"-kollektionen.
  */
 
 import { XMLParser } from "fast-xml-parser";
@@ -13,7 +13,7 @@ const COLLECTION = "pages";
 
 const SITEMAP_URL = "https://www.loplabbet.se/sitemap.xml";
 
-// Skip dessa path-prefix: produktsidor (finns redan i products) + tekniska sidor
+// Skip dessa path-prefix: produktsidor, sökfilter och tekniska sidor
 const SKIP_PREFIXES = [
   "/katalog",
   "/varukorg",
@@ -24,7 +24,13 @@ const SKIP_PREFIXES = [
   "/skovaljaren",
 ];
 
-// Parallella fetches åt gången (snäll mot servern)
+// Skip om titeln innehåller någon av dessa fraser (säkerhetsnät för produktsidor)
+const SKIP_TITLE_PATTERNS = [
+  /köp online hos löplabbet/i,
+  /\d+\s*kr\b/i, // Titlar med pris i sig är produktsidor
+];
+
+// Parallella fetches åt gången
 const CONCURRENCY = 5;
 const FETCH_DELAY_MS = 100;
 
@@ -68,11 +74,22 @@ function filterUrls(urls) {
       return false;
     }
   });
-  console.log(`    ${filtered.length} URLer efter filtrering.`);
+  console.log(`    ${filtered.length} URLer efter URL-filtrering.`);
   return filtered;
 }
 
-// ── 3. Hämta och extrahera innehåll från en sida ──────────────────────────
+// ── 3. Rensa titel ─────────────────────────────────────────────────────────
+function cleanTitle(rawTitle) {
+  let title = String(rawTitle || "").trim();
+
+  // Strippa allt efter " - Köp online hos LÖPLABBET", " | Löplabbet", " - Löplabbet"
+  title = title.replace(/\s*[\|\-–—]\s*köp online hos löplabbet.*$/i, "");
+  title = title.replace(/\s*[\|\-–—]\s*löplabbet\s*$/i, "");
+
+  return title.trim();
+}
+
+// ── 4. Hämta och extrahera innehåll från en sida ──────────────────────────
 async function fetchAndExtract({ url, lastmod }) {
   try {
     const res = await fetch(url, {
@@ -84,14 +101,18 @@ async function fetchAndExtract({ url, lastmod }) {
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // Rensa bort skräp innan vi extraherar text
+    // Rensa bort skräp
     $("script, style, nav, header, footer, aside, .cookie-banner, .breadcrumb").remove();
 
-    // Titel: <title> → första <h1> → URL-slug
-    let title = $("title").first().text().trim();
-    title = title.replace(/\s*[\|\-–—]\s*Löplabbet.*$/i, "").trim();
+    // Titel
+    let title = cleanTitle($("title").first().text());
     if (!title) title = $("h1").first().text().trim();
     if (!title) title = url.split("/").filter(Boolean).pop() || "Sida";
+
+    // ── Säkerhetsnät: skip om titel matchar produktsida-mönster ─────────
+    for (const pattern of SKIP_TITLE_PATTERNS) {
+      if (pattern.test(title)) return null;
+    }
 
     // Meta description
     const description =
@@ -102,21 +123,19 @@ async function fetchAndExtract({ url, lastmod }) {
     // Brödtext: helst <main>, annars <article>, annars <body>
     const $body = $("main").length ? $("main") : $("article").length ? $("article") : $("body");
     let content = $body.text().replace(/\s+/g, " ").trim();
-
-    // Begränsa innehållet (Typesense har ~5MB per dokument, men vi vill hålla index lean)
     if (content.length > 5000) content = content.substring(0, 5000);
 
     // Hoppa över tomma sidor
     if (!content || content.length < 50) return null;
 
-    // Sektion utifrån URL-path: /produktguider/... → "Produktguider"
+    // Sektion utifrån URL-path
     const path = new URL(url).pathname;
     const sectionSlug = path.split("/").filter(Boolean)[0] || "Övrigt";
     const section = sectionSlug
       .replace(/-/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
 
-    // ID från path (Typesense-vänligt: alphanumeriskt)
+    // ID från path
     const id = path
       .replace(/[^a-zA-Z0-9]/g, "_")
       .replace(/^_+|_+$/g, "")
@@ -137,19 +156,22 @@ async function fetchAndExtract({ url, lastmod }) {
   }
 }
 
-// ── 4. Hämta alla parallellt med rate-limit ───────────────────────────────
+// ── 5. Hämta alla parallellt ──────────────────────────────────────────────
 async function fetchAllPages(urls) {
   console.log(`📥  Hämtar ${urls.length} sidor (parallellt ${CONCURRENCY} åt gången)...`);
   const results = [];
   let done = 0;
+  let skippedAsProduct = 0;
 
   for (let i = 0; i < urls.length; i += CONCURRENCY) {
     const batch = urls.slice(i, i + CONCURRENCY);
+    const before = results.length;
     const docs = await Promise.all(batch.map(fetchAndExtract));
 
     for (const doc of docs) {
       if (doc) results.push(doc);
     }
+    skippedAsProduct += batch.length - (results.length - before);
 
     done += batch.length;
     process.stdout.write(`\r    ${done} / ${urls.length} (extraherade: ${results.length})`);
@@ -160,10 +182,11 @@ async function fetchAllPages(urls) {
   }
 
   console.log(`\n    ✅  ${results.length} sidor extraherade.`);
+  console.log(`    🚫  ${skippedAsProduct} sidor uteslutna (produktsidor / tomma).`);
   return results;
 }
 
-// ── 5. Upserta till Typesense ──────────────────────────────────────────────
+// ── 6. Upserta till Typesense ──────────────────────────────────────────────
 async function upsertToTypesense(pages) {
   console.log(`\n📤  Synkar ${pages.length} sidor till Typesense...`);
 
