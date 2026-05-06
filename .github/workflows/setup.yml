@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       recreate_collection:
-        description: "Radera och återskapa kollektionen? (ja/nej)"
+        description: "Radera och återskapa kollektioner? (ja/nej)"
         required: false
         default: "nej"
 
 jobs:
   setup:
-    name: Skapa kollektion + importera synonymer + synka
+    name: Skapa kollektioner + importera synonymer + synka allt
     runs-on: ubuntu-latest
 
     steps:
@@ -22,15 +22,22 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Installera beroenden (npm install)
+      - name: Installera beroenden
         run: npm install
 
-      - name: Skapa Typesense-kollektion
+      - name: Skapa Typesense-kollektion (produkter)
         env:
           TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
           TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
           RECREATE: ${{ github.event.inputs.recreate_collection == 'ja' && 'true' || 'false' }}
         run: node create-collection.mjs
+
+      - name: Skapa Typesense-kollektion (sidor)
+        env:
+          TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
+          TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
+          RECREATE: ${{ github.event.inputs.recreate_collection == 'ja' && 'true' || 'false' }}
+        run: node create-pages-collection.mjs
 
       - name: Importera synonymer
         env:
@@ -38,8 +45,14 @@ jobs:
           TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
         run: node import-synonyms.mjs
 
-      - name: Synka produkter från Prisjakt + Noselake
+      - name: Synka produkter
         env:
           TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
           TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
         run: node sync.mjs
+
+      - name: Synka sidor
+        env:
+          TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
+          TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
+        run: node sync-pages.mjs

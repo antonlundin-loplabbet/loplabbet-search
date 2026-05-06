@@ -1,14 +1,17 @@
 {
   "name": "loplabbet-search-sync",
-  "version": "1.0.0",
-  "description": "Synkar Löplabbet-produkter från Prisjakt-feed + Noselake API till Typesense",
+  "version": "1.1.0",
+  "description": "Synkar Löplabbet-produkter och sidor från Prisjakt-feed, Noselake API och sitemap till Typesense",
   "type": "module",
   "scripts": {
     "create-collection": "node create-collection.mjs",
+    "create-pages-collection": "node create-pages-collection.mjs",
     "sync": "node sync.mjs",
+    "sync-pages": "node sync-pages.mjs",
     "import-synonyms": "node import-synonyms.mjs"
   },
   "dependencies": {
-    "fast-xml-parser": "^4.5.6"
+    "fast-xml-parser": "^4.4.1",
+    "cheerio": "^1.0.0"
   }
 }
