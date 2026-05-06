@@ -117,7 +117,17 @@ async function fetchPage({ url, lastmod, section }) {
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    const title = ($("title").first().text() || $("h1").first().text() || "").trim();
+    // Rensa sidetitlar från "Köp online hos LÖPLABBET" etc.
+    const TITLE_CLEAN = [
+      /\s*[-–|]\s*köp online hos löplabbet\s*$/i,
+      /\s*[-–|]\s*löplabbet\s*$/i,
+    ];
+    function cleanTitle(raw) {
+      let t = (raw || "").trim();
+      for (const re of TITLE_CLEAN) t = t.replace(re, "").trim();
+      return t;
+    }
+    const title = cleanTitle($("title").first().text() || $("h1").first().text() || "").trim();
     const description =
       $('meta[name="description"]').attr("content") ||
       $('meta[property="og:description"]').attr("content") ||
