@@ -1,7 +1,11 @@
 /**
- * sync-pages.mjs (v2)
- * Hämtar loplabbet.se sitemap, filtrerar bort produktsidor,
- * extraherar innehåll och synkar till Typesense "pages"-kollektionen.
+ * sync-pages.mjs (v5 — whitelist edition)
+ *
+ * Hämtar loplabbet.se sitemap, släpper bara igenom URL:er som börjar
+ * med ett godkänt prefix (guider, landningssidor, info-sidor),
+ * och synkar till Typesense "pages"-kollektionen.
+ *
+ * Att lägga till/ta bort en kategori = redigera ALLOWED_PREFIXES nedan.
  */
 
 import { XMLParser } from "fast-xml-parser";
@@ -13,24 +17,27 @@ const COLLECTION = "pages";
 
 const SITEMAP_URL = "https://www.loplabbet.se/sitemap.xml";
 
-// Skip dessa path-prefix: produktsidor, sökfilter och tekniska sidor
-const SKIP_PREFIXES = [
-  "/katalog",
-  "/varukorg",
-  "/kassa",
-  "/mina-sidor",
-  "/inloggning",
-  "/orderbekraftelse",
-  "/skovaljaren",
+// ─────────────────────────────────────────────────────────────────────────
+// WHITELIST: bara URL:er som börjar med något av dessa prefix släpps in.
+// Motsvarar EpiServer-trädet: guider + landningssidor + info-sidor.
+// Lägg till/ta bort efter behov.
+// ─────────────────────────────────────────────────────────────────────────
+const ALLOWED_PREFIXES = [
+  "/produktguider",              // Produktguider (alla underkategorier)
+  "/landningssida",              // Landningssidor
+  "/loplabbet-tipsar",           // Löplabbet Tipsar (artiklar, tips, profiler)
+  "/tidsbokning",                // Tidsbokning + ortopedteknik, löpteknikanalys, Löplabbetmetoden
+  "/om-loplabbet",               // Om Löplabbet
+  "/team-loplabbet",             // Team Löplabbet
+  "/vara-butiker",               // Våra butiker
+  "/butiker",                    // (alt-URL om "Våra butiker" råkar bo här)
+  "/varumarken",                 // Varumärkessidor
+  "/kundservice",                // Kundservice
+  "/rea",                        // Rea-landningssida
+  "/allmanna-kopvillkor",        // Köpvillkor
+  "/tillganglighetsredogorelse", // Tillgänglighetsredogörelse
 ];
 
-// Skip om titeln innehåller någon av dessa fraser (säkerhetsnät för produktsidor)
-const SKIP_TITLE_PATTERNS = [
-  /köp online hos löplabbet/i,
-  /\d+\s*kr\b/i, // Titlar med pris i sig är produktsidor
-];
-
-// Parallella fetches åt gången
 const CONCURRENCY = 5;
 const FETCH_DELAY_MS = 100;
 
@@ -64,162 +71,131 @@ async function fetchSitemap() {
   return list;
 }
 
-// ── 2. Filtrera bort sidor vi inte vill ha med ────────────────────────────
+// ── 2. Whitelist-filter ────────────────────────────────────────────────────
 function filterUrls(urls) {
-  const filtered = urls.filter(({ url }) => {
+  const matchedByPrefix = new Map(ALLOWED_PREFIXES.map((p) => [p, 0]));
+  const filtered = [];
+
+  for (const item of urls) {
+    let path;
     try {
-      const path = new URL(url).pathname;
-      return !SKIP_PREFIXES.some((prefix) => path.startsWith(prefix));
+      path = new URL(item.url).pathname.toLowerCase();
     } catch {
-      return false;
+      continue;
     }
-  });
-  console.log(`    ${filtered.length} URLer efter URL-filtrering.`);
+
+    // Matcha mot whitelist. Kräv antingen exakt match ELLER prefix följt av "/"
+    // så att "/rea" inte råkar matcha "/realtid-nyheter" om det skulle finnas.
+    const matched = ALLOWED_PREFIXES.find(
+      (prefix) => path === prefix || path.startsWith(prefix + "/")
+    );
+
+    if (matched) {
+      matchedByPrefix.set(matched, matchedByPrefix.get(matched) + 1);
+      filtered.push(item);
+    }
+  }
+
+  console.log(`    ${filtered.length} URLer matchar whitelist:`);
+  for (const [prefix, count] of matchedByPrefix) {
+    if (count > 0) console.log(`        ${prefix.padEnd(34)} ${count}`);
+  }
+  const zeroPrefixes = [...matchedByPrefix].filter(([_, c]) => c === 0).map(([p]) => p);
+  if (zeroPrefixes.length) {
+    console.log(`    ⚠️  Prefix utan träffar (kontrollera stavning): ${zeroPrefixes.join(", ")}`);
+  }
+
   return filtered;
 }
 
-// ── 3. Rensa titel ─────────────────────────────────────────────────────────
-function cleanTitle(rawTitle) {
-  let title = String(rawTitle || "").trim();
-
-  // Strippa allt efter " - Köp online hos LÖPLABBET", " | Löplabbet", " - Löplabbet"
-  title = title.replace(/\s*[\|\-–—]\s*köp online hos löplabbet.*$/i, "");
-  title = title.replace(/\s*[\|\-–—]\s*löplabbet\s*$/i, "");
-
-  return title.trim();
-}
-
-// ── 4. Hämta och extrahera innehåll från en sida ──────────────────────────
-async function fetchAndExtract({ url, lastmod }) {
+// ── 3. Hämta och parsa enskild sida ────────────────────────────────────────
+async function fetchPage({ url, lastmod }) {
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Loplabbet-Search-Indexer/1.0" },
-      redirect: "follow",
-    });
+    const res = await fetch(url, { redirect: "follow" });
     if (!res.ok) return null;
-
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // Rensa bort skräp
-    $("script, style, nav, header, footer, aside, .cookie-banner, .breadcrumb").remove();
-
-    // Titel
-    let title = cleanTitle($("title").first().text());
-    if (!title) title = $("h1").first().text().trim();
-    if (!title) title = url.split("/").filter(Boolean).pop() || "Sida";
-
-    // ── Säkerhetsnät: skip om titel matchar produktsida-mönster ─────────
-    for (const pattern of SKIP_TITLE_PATTERNS) {
-      if (pattern.test(title)) return null;
-    }
-
-    // Meta description
+    const title = ($("title").first().text() || $("h1").first().text() || "").trim();
     const description =
-      $('meta[name="description"]').attr("content")?.trim() ||
-      $('meta[property="og:description"]').attr("content")?.trim() ||
+      $('meta[name="description"]').attr("content") ||
+      $('meta[property="og:description"]').attr("content") ||
       "";
 
-    // Brödtext: helst <main>, annars <article>, annars <body>
-    const $body = $("main").length ? $("main") : $("article").length ? $("article") : $("body");
-    let content = $body.text().replace(/\s+/g, " ").trim();
-    if (content.length > 5000) content = content.substring(0, 5000);
+    let mainText = "";
+    const mainSelectors = ["main", "article", "[role='main']", ".content", "#content"];
+    for (const sel of mainSelectors) {
+      const el = $(sel).first();
+      if (el.length) {
+        mainText = el.text().replace(/\s+/g, " ").trim();
+        break;
+      }
+    }
+    if (!mainText) {
+      mainText = $("body").text().replace(/\s+/g, " ").trim().slice(0, 5000);
+    }
 
-    // Hoppa över tomma sidor
-    if (!content || content.length < 50) return null;
-
-    // Sektion utifrån URL-path
-    const path = new URL(url).pathname;
-    const sectionSlug = path.split("/").filter(Boolean)[0] || "Övrigt";
-    const section = sectionSlug
-      .replace(/-/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-
-    // ID från path
-    const id = path
-      .replace(/[^a-zA-Z0-9]/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .substring(0, 200) || "root";
+    if (!title) return null;
 
     return {
-      id,
-      title,
-      description,
-      content,
+      id: Buffer.from(url).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 64),
       url,
-      section,
+      title,
+      description: description.trim(),
+      content: mainText.slice(0, 3000),
       lastmod,
     };
-  } catch (e) {
-    console.warn(`  ⚠️  ${url}: ${e.message}`);
+  } catch (err) {
+    console.warn(`    ⚠️  Kunde inte hämta ${url}: ${err.message}`);
     return null;
   }
 }
 
-// ── 5. Hämta alla parallellt ──────────────────────────────────────────────
+// ── 4. Hämta alla sidor med begränsad parallellism ─────────────────────────
 async function fetchAllPages(urls) {
-  console.log(`📥  Hämtar ${urls.length} sidor (parallellt ${CONCURRENCY} åt gången)...`);
+  console.log(`📄  Hämtar ${urls.length} sidor (concurrency=${CONCURRENCY})...`);
   const results = [];
-  let done = 0;
-  let skippedAsProduct = 0;
 
   for (let i = 0; i < urls.length; i += CONCURRENCY) {
     const batch = urls.slice(i, i + CONCURRENCY);
-    const before = results.length;
-    const docs = await Promise.all(batch.map(fetchAndExtract));
+    const batchResults = await Promise.all(batch.map((u) => fetchPage(u)));
 
-    for (const doc of docs) {
-      if (doc) results.push(doc);
+    for (const r of batchResults) {
+      if (r) results.push(r);
     }
-    skippedAsProduct += batch.length - (results.length - before);
 
-    done += batch.length;
-    process.stdout.write(`\r    ${done} / ${urls.length} (extraherade: ${results.length})`);
-
-    if (i + CONCURRENCY < urls.length) {
-      await new Promise((r) => setTimeout(r, FETCH_DELAY_MS));
-    }
+    process.stdout.write(`\r    ${Math.min(i + CONCURRENCY, urls.length)} / ${urls.length} klar`);
+    await new Promise((r) => setTimeout(r, FETCH_DELAY_MS));
   }
 
-  console.log(`\n    ✅  ${results.length} sidor extraherade.`);
-  console.log(`    🚫  ${skippedAsProduct} sidor uteslutna (produktsidor / tomma).`);
+  console.log(`\n    ${results.length} sidor extraherade.`);
   return results;
 }
 
-// ── 6. Upserta till Typesense ──────────────────────────────────────────────
+// ── 5. Skicka till Typesense ───────────────────────────────────────────────
 async function upsertToTypesense(pages) {
-  console.log(`\n📤  Synkar ${pages.length} sidor till Typesense...`);
+  console.log(`📤  Synkar ${pages.length} sidor till Typesense...`);
+  const ndjson = pages.map((p) => JSON.stringify(p)).join("\n");
 
-  const BATCH = 100;
-  let ok = 0;
-  let fail = 0;
+  const res = await fetch(
+    `https://${TYPESENSE_HOST}/collections/${COLLECTION}/documents/import?action=upsert`,
+    { method: "POST", headers: tsHeaders, body: ndjson }
+  );
 
-  for (let i = 0; i < pages.length; i += BATCH) {
-    const batch = pages.slice(i, i + BATCH);
-    const ndjson = batch.map((p) => JSON.stringify(p)).join("\n");
-
-    const res = await fetch(
-      `https://${TYPESENSE_HOST}/collections/${COLLECTION}/documents/import?action=upsert`,
-      { method: "POST", headers: tsHeaders, body: ndjson }
-    );
-
-    const text = await res.text();
-    const lines = text.trim().split("\n");
-
-    for (const line of lines) {
-      try {
-        const r = JSON.parse(line);
-        r.success ? ok++ : fail++;
-        if (!r.success) console.warn("  ⚠️", r.error, r.document?.id);
-      } catch {
-        fail++;
-      }
+  const text = await res.text();
+  const lines = text.split("\n").filter(Boolean);
+  let ok = 0, fail = 0;
+  for (const line of lines) {
+    try {
+      const r = JSON.parse(line);
+      r.success ? ok++ : fail++;
+      if (!r.success) console.warn("  ⚠️", r.error, r.document?.id);
+    } catch {
+      fail++;
     }
-
-    process.stdout.write(`\r    ${Math.min(i + BATCH, pages.length)} / ${pages.length} (✅ ${ok} ❌ ${fail})`);
   }
 
-  console.log(`\n\n─────────────────────────────────`);
+  console.log(`\n─────────────────────────────────`);
   console.log(`✅  Lyckades:     ${ok}`);
   console.log(`❌  Misslyckades: ${fail}`);
   console.log(`─────────────────────────────────`);
@@ -227,7 +203,7 @@ async function upsertToTypesense(pages) {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 async function main() {
-  console.log("🚀  Löplabbet Pages Sync startar...\n");
+  console.log("🚀  Löplabbet Pages Sync v5 (whitelist) startar...\n");
   const t0 = Date.now();
 
   const sitemapUrls = await fetchSitemap();
