@@ -1,11 +1,12 @@
 /**
- * sync-pages.mjs (v5 — whitelist edition)
+ * sync-pages.mjs (v5.1 — whitelist + section)
  *
  * Hämtar loplabbet.se sitemap, släpper bara igenom URL:er som börjar
  * med ett godkänt prefix (guider, landningssidor, info-sidor),
  * och synkar till Typesense "pages"-kollektionen.
  *
- * Att lägga till/ta bort en kategori = redigera ALLOWED_PREFIXES nedan.
+ * v5.1: Lägger till `section`-fältet (krav i schemat) baserat på
+ *       vilket whitelist-prefix URL:en matchade.
  */
 
 import { XMLParser } from "fast-xml-parser";
@@ -18,25 +19,27 @@ const COLLECTION = "pages";
 const SITEMAP_URL = "https://www.loplabbet.se/sitemap.xml";
 
 // ─────────────────────────────────────────────────────────────────────────
-// WHITELIST: bara URL:er som börjar med något av dessa prefix släpps in.
-// Motsvarar EpiServer-trädet: guider + landningssidor + info-sidor.
-// Lägg till/ta bort efter behov.
+// WHITELIST + SEKTIONS-ETIKETTER
+// Nyckel = URL-prefix som måste matcha. Värde = etikett som hamnar i
+// `section`-fältet (visas/filtreras på i sökresultatet).
 // ─────────────────────────────────────────────────────────────────────────
-const ALLOWED_PREFIXES = [
-  "/produktguider",              // Produktguider (alla underkategorier)
-  "/landningssida",              // Landningssidor
-  "/loplabbet-tipsar",           // Löplabbet Tipsar (artiklar, tips, profiler)
-  "/tidsbokning",                // Tidsbokning + ortopedteknik, löpteknikanalys, Löplabbetmetoden
-  "/om-loplabbet",               // Om Löplabbet
-  "/team-loplabbet",             // Team Löplabbet
-  "/vara-butiker",               // Våra butiker
-  "/butiker",                    // (alt-URL om "Våra butiker" råkar bo här)
-  "/varumarken",                 // Varumärkessidor
-  "/kundservice",                // Kundservice
-  "/rea",                        // Rea-landningssida
-  "/allmanna-kopvillkor",        // Köpvillkor
-  "/tillganglighetsredogorelse", // Tillgänglighetsredogörelse
-];
+const WHITELIST = {
+  "/produktguider":              "Produktguider",
+  "/landningssida":              "Landningssida",
+  "/loplabbet-tipsar":           "Tipsar",
+  "/tidsbokning":                "Tidsbokning",
+  "/om-loplabbet":               "Om oss",
+  "/team-loplabbet":             "Team",
+  "/vara-butiker":               "Butiker",
+  "/butiker":                    "Butiker",
+  "/varumarken":                 "Varumärken",
+  "/kundservice":                "Kundservice",
+  "/rea":                        "Rea",
+  "/allmanna-kopvillkor":        "Köpvillkor",
+  "/tillganglighetsredogorelse": "Tillgänglighet",
+};
+
+const ALLOWED_PREFIXES = Object.keys(WHITELIST);
 
 const CONCURRENCY = 5;
 const FETCH_DELAY_MS = 100;
@@ -71,7 +74,7 @@ async function fetchSitemap() {
   return list;
 }
 
-// ── 2. Whitelist-filter ────────────────────────────────────────────────────
+// ── 2. Whitelist-filter (lägger på `section` på varje träff) ──────────────
 function filterUrls(urls) {
   const matchedByPrefix = new Map(ALLOWED_PREFIXES.map((p) => [p, 0]));
   const filtered = [];
@@ -84,32 +87,30 @@ function filterUrls(urls) {
       continue;
     }
 
-    // Matcha mot whitelist. Kräv antingen exakt match ELLER prefix följt av "/"
-    // så att "/rea" inte råkar matcha "/realtid-nyheter" om det skulle finnas.
     const matched = ALLOWED_PREFIXES.find(
       (prefix) => path === prefix || path.startsWith(prefix + "/")
     );
 
     if (matched) {
       matchedByPrefix.set(matched, matchedByPrefix.get(matched) + 1);
-      filtered.push(item);
+      filtered.push({ ...item, section: WHITELIST[matched] });
     }
   }
 
   console.log(`    ${filtered.length} URLer matchar whitelist:`);
   for (const [prefix, count] of matchedByPrefix) {
-    if (count > 0) console.log(`        ${prefix.padEnd(34)} ${count}`);
+    if (count > 0) console.log(`        ${prefix.padEnd(34)} ${count}  →  ${WHITELIST[prefix]}`);
   }
   const zeroPrefixes = [...matchedByPrefix].filter(([_, c]) => c === 0).map(([p]) => p);
   if (zeroPrefixes.length) {
-    console.log(`    ⚠️  Prefix utan träffar (kontrollera stavning): ${zeroPrefixes.join(", ")}`);
+    console.log(`    ⚠️  Prefix utan träffar: ${zeroPrefixes.join(", ")}`);
   }
 
   return filtered;
 }
 
 // ── 3. Hämta och parsa enskild sida ────────────────────────────────────────
-async function fetchPage({ url, lastmod }) {
+async function fetchPage({ url, lastmod, section }) {
   try {
     const res = await fetch(url, { redirect: "follow" });
     if (!res.ok) return null;
@@ -143,6 +144,7 @@ async function fetchPage({ url, lastmod }) {
       title,
       description: description.trim(),
       content: mainText.slice(0, 3000),
+      section,                  // ← nytt: krav i schemat
       lastmod,
     };
   } catch (err) {
@@ -185,11 +187,16 @@ async function upsertToTypesense(pages) {
   const text = await res.text();
   const lines = text.split("\n").filter(Boolean);
   let ok = 0, fail = 0;
+  const sampleErrors = [];
   for (const line of lines) {
     try {
       const r = JSON.parse(line);
-      r.success ? ok++ : fail++;
-      if (!r.success) console.warn("  ⚠️", r.error, r.document?.id);
+      if (r.success) {
+        ok++;
+      } else {
+        fail++;
+        if (sampleErrors.length < 3) sampleErrors.push(r.error);
+      }
     } catch {
       fail++;
     }
@@ -198,12 +205,16 @@ async function upsertToTypesense(pages) {
   console.log(`\n─────────────────────────────────`);
   console.log(`✅  Lyckades:     ${ok}`);
   console.log(`❌  Misslyckades: ${fail}`);
+  if (sampleErrors.length) {
+    console.log(`   Exempel-fel:`);
+    sampleErrors.forEach((e) => console.log(`     · ${e}`));
+  }
   console.log(`─────────────────────────────────`);
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
 async function main() {
-  console.log("🚀  Löplabbet Pages Sync v5 (whitelist) startar...\n");
+  console.log("🚀  Löplabbet Pages Sync v5.1 startar...\n");
   const t0 = Date.now();
 
   const sitemapUrls = await fetchSitemap();
