@@ -31,8 +31,8 @@ const schema = {
   fields: [
     // ── Identifiering ──────────────────────────────────────────────
     { name: "id", type: "string" },               // item_group_id / itemnumber
-    { name: "name", type: "string" },             // Produktnamn (commercialname)
-    { name: "brand", type: "string", facet: true },
+    { name: "name", type: "string", infix: true },             // Produktnamn (commercialname)
+    { name: "brand", type: "string", facet: true, infix: true },
     { name: "gender", type: "string", facet: true },
 
     // ── Kategorier ─────────────────────────────────────────────────
@@ -50,7 +50,7 @@ const schema = {
     { name: "available_sizes", type: "string[]", facet: true },
 
     // ── Sökbar text ────────────────────────────────────────────────
-    { name: "description", type: "string" },
+    { name: "description", type: "string", infix: true },
 
     // ── Media & URL (ej indexerade) ────────────────────────────────
     { name: "image_url", type: "string", index: false },
