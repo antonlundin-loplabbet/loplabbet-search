@@ -98,6 +98,8 @@ const items = [
   // ═══════════════════════════════════════════════════════════════════════
   { id: "model-vaporfly",      rule: { query: "vaporfly", match: "contains" },    filter_by: "name:`vaporfly`" },
   { id: "model-alphafly",      rule: { query: "alphafly", match: "contains" },    filter_by: "name:`alphafly`" },
+  { id: "model-metaspeed",     rule: { query: "metaspeed", match: "contains" },   filter_by: "name:`metaspeed`" },
+  { id: "model-deviate",       rule: { query: "deviate", match: "contains" },     filter_by: "name:`deviate`" },
   { id: "model-pegasus",       rule: { query: "pegasus", match: "contains" },     filter_by: "name:`pegasus`" },
   { id: "model-bondi",         rule: { query: "bondi", match: "contains" },       filter_by: "name:`bondi`" },
   { id: "model-novablast",     rule: { query: "novablast", match: "contains" },   filter_by: "name:`novablast`" },
