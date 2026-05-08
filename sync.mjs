@@ -141,28 +141,41 @@ async function fetchAllNoselake() {
 
   console.log(`\n    ✅  ${allDocs.length} Noselake-produkter hämtade.`);
 
-  // DEBUG: visa exempel på itemnumber
+  // DIAGNOSTIK v2: alla har itemnumber, så frågan är: är de duplicerade?
   if (allDocs.length > 0) {
-    const samples = allDocs.slice(0, 3).map(d => d.itemnumber);
-    console.log(`    🔎 Noselake itemnumber-exempel: ${JSON.stringify(samples)}`);
+    // 1. Räkna unika itemnumbers
+    const itemnumbers = allDocs.map(d => String(d.itemnumber ?? "")).filter(Boolean);
+    const uniqueItemnumbers = new Set(itemnumbers);
+    const avgDup = (itemnumbers.length / uniqueItemnumbers.size).toFixed(1);
+    console.log(`    🔎 ${uniqueItemnumbers.size} unika itemnumbers bland ${itemnumbers.length} docs (${avgDup} kopior per värde i snitt)`);
 
-    // DIAGNOSTIK: hur många docs har faktiskt itemnumber, och vilka fält finns?
-    const withItemnumber = allDocs.filter(d => d.itemnumber).length;
-    console.log(`    🔎 ${withItemnumber}/${allDocs.length} docs har itemnumber på toppnivå`);
+    // 2. Sampla över hela arrayen — om pagination är trasig ser vi samma värden upprepas
+    const samplePositions = [0, 50, 100, 200, 500, 800, 1000, 1295].filter(p => p < allDocs.length);
+    console.log(`    🔎 Doc per position (för att upptäcka pagination-loop):`);
+    for (const pos of samplePositions) {
+      const d = allDocs[pos];
+      const name = d.itemname || d.productname || d.commercialname || "(namnlös)";
+      console.log(`       #${pos.toString().padStart(4)}: itemnumber=${d.itemnumber}, productnumber=${d.productnumber}, supplieritemnumber=${d.supplieritemnumber} — ${String(name).slice(0, 50)}`);
+    }
 
-    const firstDoc = allDocs[0];
-    const midDoc = allDocs[Math.floor(allDocs.length / 2)];
-    const lastDoc = allDocs[allDocs.length - 1];
+    // 3. Topp 5 mest förekommande itemnumbers — bekräftar duplicering
+    const counts = {};
+    for (const num of itemnumbers) counts[num] = (counts[num] || 0) + 1;
+    const top5 = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    console.log(`    🔎 Topp 5 mest duplicerade itemnumbers:`);
+    for (const [num, count] of top5) {
+      console.log(`       ${num}: ${count} docs`);
+    }
 
-    console.log(`    🔎 Fält i doc #0:    ${Object.keys(firstDoc).sort().join(", ")}`);
-    console.log(`    🔎 Fält i doc #${Math.floor(allDocs.length / 2)}: ${Object.keys(midDoc).sort().join(", ")}`);
-    console.log(`    🔎 Fält i doc #${allDocs.length - 1}: ${Object.keys(lastDoc).sort().join(", ")}`);
-
-    // Hitta första doc UTAN itemnumber och dumpa hela strukturen
-    const docWithout = allDocs.find(d => !d.itemnumber);
-    if (docWithout) {
-      console.log(`    🔎 Exempel på doc UTAN itemnumber (första 800 tecken):`);
-      console.log(`       ${JSON.stringify(docWithout).slice(0, 800)}`);
+    // 4. Är `categories` eller `sites` det som exploderar dem?
+    const sample = allDocs[0];
+    console.log(`    🔎 Multi-value-fält i doc #0:`);
+    for (const f of ["categories", "sites", "sportTaxonomy", "targetGroupTaxonomy", "sports", "brands"]) {
+      if (sample[f] !== undefined) {
+        const v = sample[f];
+        const preview = Array.isArray(v) ? `[${v.length}] ${JSON.stringify(v).slice(0, 100)}` : JSON.stringify(v).slice(0, 100);
+        console.log(`       ${f}: ${preview}`);
+      }
     }
   }
   return allDocs;
