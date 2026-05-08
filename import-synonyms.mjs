@@ -1,69 +1,114 @@
 /**
- * import-synonyms.mjs
- * Importerar synonymer till Typesense Cloud
+ * import-synonyms.mjs (v2 — synonym_sets API)
  *
- * Kör med:
- *   TYPESENSE_HOST=xxx.typesense.net TYPESENSE_API_KEY=din-admin-nyckel node import-synonyms.mjs
+ * Skapar/uppdaterar ett synonym_set "loplabbet-synonyms" och länkar
+ * det till products-kollektionen. Använder Typesense v30+ API.
  *
- * Eller sätt variablerna i en .env och kör med:
- *   npx dotenv-cli node import-synonyms.mjs
+ * Bakåtkompatibilitet: faller tillbaka till legacy per-collection-API
+ * om synonym_sets returnerar 404.
  */
 
 import { readFileSync } from "fs";
 
-const HOST = process.env.TYPESENSE_HOST;
-const API_KEY = process.env.TYPESENSE_ADMIN_KEY;
+const HOST       = process.env.TYPESENSE_HOST;
+const API_KEY    = process.env.TYPESENSE_ADMIN_KEY;
 const COLLECTION = process.env.TYPESENSE_COLLECTION || "products";
+const SET_NAME   = "loplabbet-synonyms";
 
 if (!HOST || !API_KEY) {
-  console.error(
-    "❌  Sätt TYPESENSE_HOST och TYPESENSE_API_KEY som miljövariabler."
-  );
+  console.error("❌  Sätt TYPESENSE_HOST och TYPESENSE_ADMIN_KEY.");
   process.exit(1);
 }
 
-// Ladda synonymfilen – ta bort JS-kommentarer (// ...) innan JSON-parse
-const raw = readFileSync("./typesense-synonyms.json", "utf8");
-const stripped = raw.replace(/\/\/.*$/gm, ""); // strip inline comments
-const synonyms = JSON.parse(stripped);
-
-const baseUrl = `https://${HOST}/collections/${COLLECTION}/synonyms`;
 const headers = {
   "Content-Type": "application/json",
   "X-TYPESENSE-API-KEY": API_KEY,
 };
 
-let ok = 0;
-let fail = 0;
+// Ladda och städa kommentarer från synonym-filen
+const raw = readFileSync("./typesense-synonyms.json", "utf8");
+const stripped = raw.replace(/\/\/.*$/gm, "");
+const synonyms = JSON.parse(stripped);
 
-console.log(`\n🔄  Importerar ${synonyms.length} synonymgrupper till "${COLLECTION}"...\n`);
+console.log(`\n🔄  Importerar ${synonyms.length} synonymgrupper...\n`);
 
-for (const syn of synonyms) {
-  const { id, ...body } = syn;
-  const url = `${baseUrl}/${id}`;
+// ── Steg 1: Försök med v30+ synonym_sets API ───────────────────────────
+async function tryV30() {
+  const setBody = {
+    items: synonyms.map(syn => {
+      const item = { id: syn.id, synonyms: syn.synonyms };
+      if (syn.root) item.root = syn.root;
+      return item;
+    })
+  };
 
-  try {
-    const res = await fetch(url, {
+  console.log(`📤  Försöker via synonym_sets API (v30+)...`);
+  const setUrl = `https://${HOST}/synonym_sets/${SET_NAME}`;
+  const res = await fetch(setUrl, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(setBody),
+  });
+
+  if (res.status === 404) {
+    console.log(`    synonym_sets-endpointen finns inte (≤v29). Faller tillbaka.`);
+    return false;
+  }
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`❌  synonym_sets PUT failade: ${res.status} ${err}`);
+    return false;
+  }
+
+  console.log(`✅  Synonym set "${SET_NAME}" sparat (${synonyms.length} grupper).`);
+
+  // Länka set till kollektionen
+  console.log(`🔗  Länkar set till "${COLLECTION}"...`);
+  const linkRes = await fetch(`https://${HOST}/collections/${COLLECTION}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ synonym_sets: [SET_NAME] }),
+  });
+  if (!linkRes.ok) {
+    const err = await linkRes.text();
+    console.error(`⚠️   Kunde inte länka set: ${linkRes.status} ${err}`);
+    console.error(`     Du kan länka manuellt eller via search-parametern synonym_sets=${SET_NAME}.`);
+  } else {
+    console.log(`✅  Set länkat till ${COLLECTION}.`);
+  }
+
+  return true;
+}
+
+// ── Steg 2: Fallback till legacy per-collection API ────────────────────
+async function tryLegacy() {
+  console.log(`📤  Försöker via legacy per-collection API...`);
+  const baseUrl = `https://${HOST}/collections/${COLLECTION}/synonyms`;
+  let ok = 0, fail = 0;
+
+  for (const syn of synonyms) {
+    const { id, ...body } = syn;
+    const res = await fetch(`${baseUrl}/${id}`, {
       method: "PUT",
       headers,
       body: JSON.stringify(body),
     });
-
-    if (res.ok) {
-      console.log(`✅  ${id}`);
-      ok++;
-    } else {
-      const err = await res.text();
-      console.warn(`⚠️   ${id} → ${res.status}: ${err}`);
+    if (res.ok) ok++;
+    else {
       fail++;
+      const err = await res.text();
+      console.warn(`⚠️   ${id} → ${res.status}: ${err.slice(0, 200)}`);
     }
-  } catch (e) {
-    console.error(`❌  ${id} → ${e.message}`);
-    fail++;
   }
+  console.log(`\nLegacy-resultat: ${ok} OK, ${fail} misslyckade.`);
+  return ok > 0;
 }
 
-console.log(`\n─────────────────────────────────`);
-console.log(`✅  Klara:    ${ok}`);
-console.log(`❌  Misslyckades: ${fail}`);
-console.log(`─────────────────────────────────\n`);
+// ── Main ────────────────────────────────────────────────────────────────
+const v30Ok = await tryV30();
+if (!v30Ok) {
+  await tryLegacy();
+}
+
+console.log(`\n✨  Klart.`);
