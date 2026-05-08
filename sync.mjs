@@ -1,10 +1,11 @@
 /**
- * sync.mjs (v2 — fixad ID-matchning)
+ * sync.mjs (v3 — fixad Noselake-paginering)
  * Hämtar Prisjakt-feed + Noselake API, slår ihop och synkar till Typesense.
  *
- * Fix mot tidigare version: Prisjakts item_group_id och Noselakes itemnumber
- * matchade inte alls (bara 36/3582 träffade). Nu normaliseras båda till
- * en gemensam nyckel + vi loggar matchningsstatistik.
+ * Fix mot v2: searcher-endpointen ignorerade `from`/`size` så vi fick bara
+ * 36 unika produkter på loop. Använder `hits=10000` (samma approach som
+ * fetch_descriptions.py i prisjakt-filter-repot) för att hämta hela
+ * katalogen i en request. Läser även rätt totalfält (`numberOfHits`).
  */
 
 import { XMLParser } from "fast-xml-parser";
@@ -15,7 +16,7 @@ const COLLECTION = "products";
 
 const PRISJAKT_URL = "https://cdn.intersport.se/pricefiles/v2/loplabbet-prisjakt-v1.xml";
 const NOSELAKE_URL = "https://services.intersport.se/api/noselake/searcher/website";
-const NOSELAKE_PAGE_SIZE = 100;
+const NOSELAKE_HITS = 10000;
 
 if (!TYPESENSE_HOST || !TYPESENSE_KEY) {
   console.error("❌  Sätt TYPESENSE_HOST och TYPESENSE_ADMIN_KEY.");
@@ -118,67 +119,37 @@ function groupPrisjaktItems(items) {
 }
 
 // ── 3. Hämta Noselake ──────────────────────────────────────────────────────
+// Searcher-endpointen ignorerar `from`/`size` men respekterar `hits`.
+// En enda request hämtar hela katalogen — samma approach som
+// fetch_descriptions.py i prisjakt-filter-repot.
 async function fetchAllNoselake() {
-  console.log("📥  Hämtar Noselake-API (alla sidor)...");
-  const allDocs = [];
-  let from = 0;
+  console.log("📥  Hämtar Noselake-API...");
 
-  while (true) {
-    const url = `${NOSELAKE_URL}?q=&site=Loplabbet&from=${from}&size=${NOSELAKE_PAGE_SIZE}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Noselake fetch failed: ${res.status}`);
-    const json = await res.json();
+  const url = `${NOSELAKE_URL}?q=&site=Loplabbet&hits=${NOSELAKE_HITS}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "loplabbet-typesense-sync/3.0 (+https://github.com/antonlundin-loplabbet)",
+      "Accept": "application/json",
+    },
+  });
+  if (!res.ok) throw new Error(`Noselake fetch failed: ${res.status}`);
+  const json = await res.json();
 
-    const docs = json?.data?.products?.documents ?? [];
-    allDocs.push(...docs);
+  const products = json?.data?.products ?? {};
+  const docs = products.documents ?? [];
+  const total = products.numberOfHits ?? docs.length;
 
-    const total = json?.data?.stats?.totalHits ?? 0;
-    from += NOSELAKE_PAGE_SIZE;
-    process.stdout.write(`\r    ${allDocs.length} / ${total} produkter...`);
-    if (from >= total) break;
-    await sleep(150);
+  console.log(`    ✅  ${docs.length} av ${total} Noselake-produkter hämtade.`);
+
+  if (docs.length < total) {
+    console.warn(`    ⚠️   Färre returnerades än totalen — höj NOSELAKE_HITS över ${total}.`);
   }
 
-  console.log(`\n    ✅  ${allDocs.length} Noselake-produkter hämtade.`);
+  // Sanity-check: räkna unika itemnumbers så vi snabbt ser om vi tappar duplicering
+  const unique = new Set(docs.map(d => String(d.itemnumber ?? "")).filter(Boolean));
+  console.log(`    🔎 ${unique.size} unika itemnumbers (${(docs.length / Math.max(unique.size, 1)).toFixed(2)} docs/itemnumber)`);
 
-  // DIAGNOSTIK v2: alla har itemnumber, så frågan är: är de duplicerade?
-  if (allDocs.length > 0) {
-    // 1. Räkna unika itemnumbers
-    const itemnumbers = allDocs.map(d => String(d.itemnumber ?? "")).filter(Boolean);
-    const uniqueItemnumbers = new Set(itemnumbers);
-    const avgDup = (itemnumbers.length / uniqueItemnumbers.size).toFixed(1);
-    console.log(`    🔎 ${uniqueItemnumbers.size} unika itemnumbers bland ${itemnumbers.length} docs (${avgDup} kopior per värde i snitt)`);
-
-    // 2. Sampla över hela arrayen — om pagination är trasig ser vi samma värden upprepas
-    const samplePositions = [0, 50, 100, 200, 500, 800, 1000, 1295].filter(p => p < allDocs.length);
-    console.log(`    🔎 Doc per position (för att upptäcka pagination-loop):`);
-    for (const pos of samplePositions) {
-      const d = allDocs[pos];
-      const name = d.itemname || d.productname || d.commercialname || "(namnlös)";
-      console.log(`       #${pos.toString().padStart(4)}: itemnumber=${d.itemnumber}, productnumber=${d.productnumber}, supplieritemnumber=${d.supplieritemnumber} — ${String(name).slice(0, 50)}`);
-    }
-
-    // 3. Topp 5 mest förekommande itemnumbers — bekräftar duplicering
-    const counts = {};
-    for (const num of itemnumbers) counts[num] = (counts[num] || 0) + 1;
-    const top5 = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    console.log(`    🔎 Topp 5 mest duplicerade itemnumbers:`);
-    for (const [num, count] of top5) {
-      console.log(`       ${num}: ${count} docs`);
-    }
-
-    // 4. Är `categories` eller `sites` det som exploderar dem?
-    const sample = allDocs[0];
-    console.log(`    🔎 Multi-value-fält i doc #0:`);
-    for (const f of ["categories", "sites", "sportTaxonomy", "targetGroupTaxonomy", "sports", "brands"]) {
-      if (sample[f] !== undefined) {
-        const v = sample[f];
-        const preview = Array.isArray(v) ? `[${v.length}] ${JSON.stringify(v).slice(0, 100)}` : JSON.stringify(v).slice(0, 100);
-        console.log(`       ${f}: ${preview}`);
-      }
-    }
-  }
-  return allDocs;
+  return docs;
 }
 
 // ── 4. Bygg multi-key Noselake-map ─────────────────────────────────────────
@@ -308,8 +279,6 @@ function normalizeGender(g) {
   if (s.includes("herr") || s.includes("men")) return "Herr";
   return "Unisex";
 }
-
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function main() {
   console.log("🚀  Löplabbet Typesense Sync v2 startar...\n");
