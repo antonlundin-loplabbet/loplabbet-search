@@ -1,24 +1,26 @@
 /**
- * setup-curations.mjs
- * Skapar/uppdaterar Typesense curation rules för begreppsfrågor som inte
- * mappar direkt mot produktnamn (lågt drop, distans, lätt, stabil etc.).
+ * setup-curations.mjs (v2 — Typesense v30 API)
+ * Skapar/uppdaterar curation rules för begreppsfrågor.
  *
- * Idempotent — PUT på override-ID skriver över befintlig regel. Kör manuellt
- * när du vill lägga till eller justera regler. Curations lever i Typesense
- * och påverkar alla framtida sökningar oavsett widget-version.
+ * v30-migration: overrides är inte längre nested under collections.
+ *   Gammal path: PUT /collections/{name}/overrides/{id}      (404 i v30)
+ *   Ny path:    PUT /curation_sets/{name}  +  länkning till collection
+ *
+ * Scriptet:
+ *   1. PUT:ar hela curation set:et i ett anrop (idempotent — skriver över)
+ *   2. PATCH:ar collectionen så den länkas till setet
  *
  * Användning:
  *   TYPESENSE_HOST=... TYPESENSE_ADMIN_KEY=... node setup-curations.mjs
  *
- * Verifiera fältformat först! Curations använder `filter_by` mot fält i
- * collection-schemat. Om t.ex. `drop` är string i schemat ser syntax ut
- * som drop:=[`0`,`1`,`2`...]; om det är int32 blir det drop:[0..4].
- * Kolla med: curl -H "X-TYPESENSE-API-KEY: $KEY" https://$HOST/collections/products
+ * API-nyckel: behöver `curation_sets:*` action (inte längre `overrides:*`).
+ * Master key fungerar alltid. Vid 401 — generera ny key med rätt action.
  */
 
 const TYPESENSE_HOST = process.env.TYPESENSE_HOST;
 const TYPESENSE_KEY = process.env.TYPESENSE_ADMIN_KEY;
 const COLLECTION = "products";
+const CURATION_SET = "loplabbet_concepts";
 
 if (!TYPESENSE_HOST || !TYPESENSE_KEY) {
   console.error("❌  Sätt TYPESENSE_HOST och TYPESENSE_ADMIN_KEY.");
@@ -26,18 +28,11 @@ if (!TYPESENSE_HOST || !TYPESENSE_KEY) {
 }
 
 // ── Reglerna ───────────────────────────────────────────────────────────────
-// Antaganden om fält (justera filter_by om verkligheten skiljer sig):
-//   drop          string  ("0", "4", "8" — utan "mm"-suffix)
-//   subcategory   string  ("Distans", "Tävling", "Trail" etc.)
-//   stability     string  ("Neutral", "Stabil")
-//   weight_grams  int32
-//   name          string  (full produkttitel)
-//
-// `match: "contains"` betyder att regeln triggar om frasen finns någonstans
-// i sökningen (t.ex. "lågt drop hoka" triggar lågt-drop-regeln).
-// Använd "exact" för regler som ska vara striktare.
+// Justera filter_by om fältnamn/typ skiljer sig från antagandena nedan.
+// Verifiera schemat med:
+//   curl -H "X-TYPESENSE-API-KEY: $KEY" https://$HOST/collections/products | jq '.fields[]'
 
-const curations = [
+const items = [
   // ── Drop-begrepp ─────────────────────────────────────────────────────────
   {
     id: "concept-lagt-drop",
@@ -90,9 +85,7 @@ const curations = [
   },
 
   // ── Modell-disambiguering ────────────────────────────────────────────────
-  // Vaporfly-sökning lockar Alphafly. Vi tvingar fram bara produkter med
-  // "vaporfly" i namnet. Field weighting i widgeten löser detta också,
-  // men curationen är ett bälte-och-hängslen-skydd.
+  // Vaporfly-sökning lockar Alphafly. Dynamiskt filter på namn för säkerhets skull.
   {
     id: "model-vaporfly",
     rule: { query: "vaporfly", match: "contains" },
@@ -100,16 +93,12 @@ const curations = [
   },
 ];
 
-// ── Upsert ────────────────────────────────────────────────────────────────
-async function upsertOverride(override) {
-  const url = `https://${TYPESENSE_HOST}/collections/${COLLECTION}/overrides/${override.id}`;
-  const body = {
-    rule: override.rule,
-    ...(override.filter_by && { filter_by: override.filter_by }),
-    ...(override.includes && { includes: override.includes }),
-    ...(override.excludes && { excludes: override.excludes }),
-  };
+// ── 1. Upsert hela curation set ─────────────────────────────────────────────
+async function upsertCurationSet() {
+  const url = `https://${TYPESENSE_HOST}/curation_sets/${CURATION_SET}`;
+  const body = { items };
 
+  console.log(`📤  PUT /curation_sets/${CURATION_SET} (${items.length} items)...`);
   const res = await fetch(url, {
     method: "PUT",
     headers: {
@@ -121,27 +110,76 @@ async function upsertOverride(override) {
 
   const text = await res.text();
   if (!res.ok) {
-    console.log(`❌  ${override.id.padEnd(28)} HTTP ${res.status} — ${text.slice(0, 180)}`);
+    console.error(`❌  HTTP ${res.status} — ${text.slice(0, 400)}`);
+    if (res.status === 401) {
+      console.error("   → API-nyckeln saknar 'curation_sets:*' action.");
+      console.error("   → Generera ny nyckel med rätt action eller använd master key.");
+    } else if (res.status === 400) {
+      console.error("   → Sannolikt fel filter_by-syntax. Verifiera fältnamn och typ i schemat.");
+    }
     return false;
   }
-  console.log(`✅  ${override.id.padEnd(28)} query="${override.rule.query}" → ${override.filter_by ?? "(includes/excludes)"}`);
+
+  console.log(`✅  Curation set "${CURATION_SET}" sparad.`);
+  for (const item of items) {
+    console.log(`   • ${item.id.padEnd(28)} "${item.rule.query}" → ${item.filter_by}`);
+  }
+  return true;
+}
+
+// ── 2. Länka set till collection ────────────────────────────────────────────
+async function linkToCollection() {
+  const url = `https://${TYPESENSE_HOST}/collections/${COLLECTION}`;
+
+  // Kolla först befintliga länkningar så vi inte oavsiktligt kastar bort andra set
+  const getRes = await fetch(url, {
+    headers: { "X-TYPESENSE-API-KEY": TYPESENSE_KEY },
+  });
+  if (!getRes.ok) {
+    console.error(`❌  Kunde inte hämta collection: HTTP ${getRes.status}`);
+    return false;
+  }
+  const collection = await getRes.json();
+  const existing = collection.curation_sets ?? [];
+  const merged = Array.from(new Set([...existing, CURATION_SET]));
+
+  if (existing.includes(CURATION_SET)) {
+    console.log(`ℹ️   Collection "${COLLECTION}" är redan länkad till "${CURATION_SET}".`);
+    return true;
+  }
+
+  console.log(`🔗  PATCH /collections/${COLLECTION} → curation_sets=${JSON.stringify(merged)}`);
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-TYPESENSE-API-KEY": TYPESENSE_KEY,
+    },
+    body: JSON.stringify({ curation_sets: merged }),
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    console.error(`❌  HTTP ${res.status} — ${text.slice(0, 400)}`);
+    return false;
+  }
+  console.log(`✅  Collection "${COLLECTION}" länkad till "${CURATION_SET}".`);
   return true;
 }
 
 async function main() {
-  console.log(`🚀  Sätter ${curations.length} curation rules i collection "${COLLECTION}"...\n`);
-  let ok = 0, fail = 0;
-  for (const c of curations) {
-    if (await upsertOverride(c)) ok++; else fail++;
-  }
+  console.log(`🚀  Sätter curation rules i Typesense (v30 API)...\n`);
+
+  const setOk = await upsertCurationSet();
+  if (!setOk) process.exit(1);
+
+  console.log("");
+  const linkOk = await linkToCollection();
+  if (!linkOk) process.exit(1);
+
   console.log(`\n─────────────────────────────────`);
-  console.log(`✅  Lyckades:     ${ok}`);
-  console.log(`❌  Misslyckades: ${fail}`);
+  console.log(`✅  Klart. ${items.length} regler aktiva på collection "${COLLECTION}".`);
   console.log(`─────────────────────────────────`);
-  if (fail > 0) {
-    console.log(`\nVid HTTP 400: oftast fel filter_by-syntax. Verifiera att fältet finns`);
-    console.log(`i schemat och att typen (string/int32) stämmer med hur regeln formulerats.`);
-  }
 }
 
 main().catch((e) => { console.error("💥  Oväntat fel:", e); process.exit(1); });
