@@ -43,62 +43,38 @@ if (!TYPESENSE_HOST || !TYPESENSE_KEY) {
 }
 
 // ── Reglerna ───────────────────────────────────────────────────────────────
+//
+// Princip: curation rules används BARA för det synonymer fundamentalt
+// inte kan göra. Synonymer hanterar all begrepp→produkt-matchning via
+// text (tävling, mjuk, stabil, bred, distans, mm.) eftersom det jobbar
+// mot namn och beskrivning. Curations kompletterar med:
+//
+//   1. Numeriska/range-filter   (drop, vikt, pris, rabatt)
+//   2. Boolean-filter           (rea, i lager)
+//   3. Sort-overrides           ("bästsäljare", "billigast")
+//   4. Disambiguering           (vaporfly vs alphafly, On vs ord med "on")
+//
+// Tidigare hade vi även filter för subcategory/stabilitet/dämpning/bredd/
+// kön, men de skapade konflikter med synonym-expansionen och returnerade
+// 0 träffar i flera fall. Synonymerna i `typesense-synonyms.json` täcker
+// dessa via textmatchning istället, vilket är mer förlåtande.
+
 const items = [
   // ═══════════════════════════════════════════════════════════════════════
-  //  DROP
+  //  DROP — numeriskt range-filter (synonymer kan inte göra detta)
   // ═══════════════════════════════════════════════════════════════════════
   { id: "concept-lagt-drop",   rule: { query: "lågt drop", match: "contains" },   filter_by: "drop:=[`0`,`1`,`2`,`3`,`4`]" },
   { id: "concept-hogt-drop",   rule: { query: "högt drop", match: "contains" },   filter_by: "drop:=[`8`,`9`,`10`,`11`,`12`]" },
   { id: "concept-noll-drop",   rule: { query: "0 drop", match: "contains" },      filter_by: "drop:=`0`" },
 
   // ═══════════════════════════════════════════════════════════════════════
-  //  SKOTYP (subcategory från Prisjakt product_type)
-  // ═══════════════════════════════════════════════════════════════════════
-  { id: "concept-tavling",     rule: { query: "tävling", match: "contains" },     filter_by: "subcategory:=`Tävling`" },
-  { id: "concept-distans",     rule: { query: "distans", match: "contains" },     filter_by: "subcategory:=`Distans`" },
-  { id: "concept-trail",       rule: { query: "trail", match: "contains" },       filter_by: "subcategory:=`Trail`" },
-  { id: "concept-marathon",    rule: { query: "marathon", match: "contains" },    filter_by: "subcategory:=`Distans`" },
-
-  // ═══════════════════════════════════════════════════════════════════════
-  //  EGENSKAPER
-  //  Värden från CMS-template:
-  //    Stabilitet:  Flexibel / Medium / Stabil
-  //    Dämpning:    Mjuk / Medel / Fast
+  //  VIKT — numeriskt filter
   // ═══════════════════════════════════════════════════════════════════════
   { id: "concept-latt",        rule: { query: "lätt sko", match: "contains" },    filter_by: "weight_grams:<220" },
   { id: "concept-tung",        rule: { query: "tung sko", match: "contains" },    filter_by: "weight_grams:>280" },
-  { id: "concept-stabil",      rule: { query: "stabil", match: "contains" },      filter_by: "stability:=`Stabil`" },
-  { id: "concept-medium-stab", rule: { query: "lätt stabilitet", match: "contains" }, filter_by: "stability:=`Medium`" },
-  { id: "concept-flexibel",    rule: { query: "flexibel", match: "contains" },    filter_by: "stability:=`Flexibel`" },
-  { id: "concept-neutral",     rule: { query: "neutral", match: "contains" },     filter_by: "stability:=`Flexibel`" }, // "neutral sko" = flexibel i Löplabbet-terminologi
 
   // ═══════════════════════════════════════════════════════════════════════
-  //  BREDD (last_width — verifierat fältnamn)
-  //  OBS: id-ordning styr precedens. "extra bred" måste komma före "bred sko".
-  // ═══════════════════════════════════════════════════════════════════════
-  { id: "concept-bred-a-extra", rule: { query: "extra bred", match: "contains" }, filter_by: "last_width:=`Extra bred`" },
-  { id: "concept-bred-b-bred",  rule: { query: "bred sko", match: "contains" },   filter_by: "last_width:=[`Bred`,`Extra bred`]" },
-  { id: "concept-bred-c-fot",   rule: { query: "bred fot", match: "contains" },   filter_by: "last_width:=[`Bred`,`Extra bred`]" },
-  { id: "concept-smal",         rule: { query: "smal", match: "contains" },       filter_by: "last_width:=`Smal`" },
-
-  // ═══════════════════════════════════════════════════════════════════════
-  //  DÄMPNING (cushioning) — värden: Mjuk / Medel / Fast
-  // ═══════════════════════════════════════════════════════════════════════
-  { id: "concept-mjuk",        rule: { query: "mjuk", match: "contains" },        filter_by: "cushioning:=`Mjuk`" },
-  { id: "concept-mjuk-2",      rule: { query: "mycket dämpning", match: "contains" }, filter_by: "cushioning:=`Mjuk`" },
-  { id: "concept-medel",       rule: { query: "medel dämpning", match: "contains" }, filter_by: "cushioning:=`Medel`" },
-  { id: "concept-lagom",       rule: { query: "lagom dämpning", match: "contains" }, filter_by: "cushioning:=`Medel`" },
-  { id: "concept-fast",        rule: { query: "responsiv", match: "contains" },   filter_by: "cushioning:=`Fast`" },
-  { id: "concept-fast-2",      rule: { query: "fast dämpning", match: "contains" }, filter_by: "cushioning:=`Fast`" },
-
-  // ═══════════════════════════════════════════════════════════════════════
-  //  MÅLGRUPP (gender — normaliserat till Dam/Herr/Unisex i sync.mjs)
-  // ═══════════════════════════════════════════════════════════════════════
-  { id: "concept-dam",         rule: { query: "damsko", match: "contains" },      filter_by: "gender:=`Dam`" },
-  { id: "concept-herr",        rule: { query: "herrsko", match: "contains" },     filter_by: "gender:=`Herr`" },
-
-  // ═══════════════════════════════════════════════════════════════════════
-  //  PRIS & REA (alla verifierade)
+  //  PRIS & REA — numeriskt/boolean
   // ═══════════════════════════════════════════════════════════════════════
   { id: "concept-billig",      rule: { query: "billig", match: "contains" },      filter_by: "price:<1500" },
   { id: "concept-budget",      rule: { query: "budget", match: "contains" },      filter_by: "price:<1500" },
@@ -109,7 +85,7 @@ const items = [
   { id: "concept-i-lager",     rule: { query: "i lager", match: "contains" },     filter_by: "in_stock:=true" },
 
   // ═══════════════════════════════════════════════════════════════════════
-  //  RANKING (dynamic sort) — popularity finns, release_date gör inte
+  //  RANKING (sort-override — synonymer kan inte ändra ordning)
   // ═══════════════════════════════════════════════════════════════════════
   { id: "rank-bastsaljare",    rule: { query: "bästsäljare", match: "contains" }, sort_by: "popularity:desc" },
   { id: "rank-populart",       rule: { query: "populär", match: "contains" },     sort_by: "popularity:desc" },
@@ -118,6 +94,7 @@ const items = [
 
   // ═══════════════════════════════════════════════════════════════════════
   //  MODELL-DISAMBIGUERING — tvingar namn-match före brand/popularity
+  //  Behövs för modeller där populärare grannmodell skulle ranka högre
   // ═══════════════════════════════════════════════════════════════════════
   { id: "model-vaporfly",      rule: { query: "vaporfly", match: "contains" },    filter_by: "name:`vaporfly`" },
   { id: "model-alphafly",      rule: { query: "alphafly", match: "contains" },    filter_by: "name:`alphafly`" },
@@ -130,9 +107,24 @@ const items = [
   { id: "model-endorphin",     rule: { query: "endorphin", match: "contains" },   filter_by: "name:`endorphin`" },
 
   // ═══════════════════════════════════════════════════════════════════════
-  //  MÄRKES-DISAMBIGUERING
+  //  MÄRKES-DISAMBIGUERING — kort/tvetydigt märkesnamn
   // ═══════════════════════════════════════════════════════════════════════
   { id: "brand-on",            rule: { query: "on cloud", match: "contains" },    filter_by: "brand:=`On`" },
+];
+
+// ── Reglar som tagits bort i denna version och ska raderas från Typesense ──
+// Dessa upsertades tidigare men ersatts av synonymer som hanterar samma intent
+// via textmatchning. Listan kan tömmas när alla miljöer kört scriptet en gång.
+const obsoleteIds = [
+  "concept-tavling", "concept-distans", "concept-trail", "concept-marathon",
+  "concept-daily", "concept-daily-2", "concept-tempo", "concept-intervaller",
+  "concept-aterhamtning",
+  "concept-stabil", "concept-medium-stab", "concept-flexibel", "concept-neutral",
+  "concept-mjuk", "concept-mjuk-2", "concept-medel", "concept-lagom",
+  "concept-fast", "concept-fast-2",
+  "concept-bred-a-extra", "concept-bred-b-bred", "concept-bred-c-fot", "concept-smal",
+  "concept-dam", "concept-herr",
+  "rank-nyhet", // tidigare experiment, sort_by release_date — fältet finns inte
 ];
 
 // ── Anropshjälpare ──────────────────────────────────────────────────────────
@@ -162,6 +154,25 @@ async function ensureCurationSet() {
   } else {
     console.log(`   ✅  OK.`);
   }
+}
+
+// ── 1b. Radera obsoleta items ───────────────────────────────────────────────
+async function deleteObsolete() {
+  console.log(`\n🗑️   Raderar ${obsoleteIds.length} obsoleta regler...`);
+  let removed = 0, missing = 0;
+  for (const id of obsoleteIds) {
+    const r = await tsRequest("DELETE", `/curation_sets/${CURATION_SET}/items/${id}`);
+    if (r.ok) {
+      console.log(`   ✅  ${id}`);
+      removed++;
+    } else if (r.status === 404) {
+      // Redan borta — ofarligt
+      missing++;
+    } else {
+      console.log(`   ⚠️   ${id} HTTP ${r.status} — ${r.text.slice(0, 80)}`);
+    }
+  }
+  console.log(`   → ${removed} raderade, ${missing} fanns redan inte.`);
 }
 
 // ── 2. Upserta varje item separat ───────────────────────────────────────────
@@ -213,6 +224,7 @@ async function main() {
   console.log(`🚀  Sätter ${items.length} curation rules på "${COLLECTION}" (Typesense v30)\n`);
 
   await ensureCurationSet();
+  await deleteObsolete();
 
   console.log(`\n📤  Upsertar ${items.length} items...`);
   let ok = 0, fail = 0;
