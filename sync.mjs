@@ -145,6 +145,25 @@ async function fetchAllNoselake() {
   if (allDocs.length > 0) {
     const samples = allDocs.slice(0, 3).map(d => d.itemnumber);
     console.log(`    🔎 Noselake itemnumber-exempel: ${JSON.stringify(samples)}`);
+
+    // DIAGNOSTIK: hur många docs har faktiskt itemnumber, och vilka fält finns?
+    const withItemnumber = allDocs.filter(d => d.itemnumber).length;
+    console.log(`    🔎 ${withItemnumber}/${allDocs.length} docs har itemnumber på toppnivå`);
+
+    const firstDoc = allDocs[0];
+    const midDoc = allDocs[Math.floor(allDocs.length / 2)];
+    const lastDoc = allDocs[allDocs.length - 1];
+
+    console.log(`    🔎 Fält i doc #0:    ${Object.keys(firstDoc).sort().join(", ")}`);
+    console.log(`    🔎 Fält i doc #${Math.floor(allDocs.length / 2)}: ${Object.keys(midDoc).sort().join(", ")}`);
+    console.log(`    🔎 Fält i doc #${allDocs.length - 1}: ${Object.keys(lastDoc).sort().join(", ")}`);
+
+    // Hitta första doc UTAN itemnumber och dumpa hela strukturen
+    const docWithout = allDocs.find(d => !d.itemnumber);
+    if (docWithout) {
+      console.log(`    🔎 Exempel på doc UTAN itemnumber (första 800 tecken):`);
+      console.log(`       ${JSON.stringify(docWithout).slice(0, 800)}`);
+    }
   }
   return allDocs;
 }
