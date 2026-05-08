@@ -1036,15 +1036,20 @@
     "synonyms": [
       "bred passform",
       "bred",
+      "bredare",
       "vid passform",
       "wide",
       "wide fit",
       "extra wide",
+      "extra bred",
       "bredläst",
       "bred läst",
       "bred fot",
       "breda fötter",
-      "vidläst"
+      "bredare fötter",
+      "vidläst",
+      "löparskor för breda fötter",
+      "löparskor för bredare fötter"
     ]
   },
   {
@@ -1136,6 +1141,85 @@
       "hydrationväst",
       "vätskeväst",
       "ryggsäck löpning"
+    ]
+  },
+  {
+    "id": "page-energiguide",
+    "synonyms": [
+      "energi",
+      "energiguide",
+      "energikalkylator",
+      "energiräknare",
+      "fuel guide",
+      "fuelguide",
+      "näringsguide",
+      "kolhydratberäknare",
+      "intagsberäkning",
+      "intagsguide",
+      "maurten kalkylator",
+      "maurten guide"
+    ]
+  },
+  {
+    "id": "page-skoguide",
+    "synonyms": [
+      "skoguide",
+      "skoväljaren",
+      "skoväljare",
+      "shoe guide",
+      "köpguide skor",
+      "vilken sko",
+      "hjälp välja sko",
+      "vilken löparsko"
+    ]
+  },
+  {
+    "id": "page-bicarb-guide",
+    "synonyms": [
+      "bicarb guide",
+      "bikarbonatguide",
+      "bikarbonat guide",
+      "bicarb dosering",
+      "bicarb kalkylator",
+      "maurten bicarb guide"
+    ]
+  },
+  {
+    "id": "page-team",
+    "synonyms": [
+      "team löplabbet",
+      "vårt team",
+      "personal",
+      "anställda",
+      "experter",
+      "rådgivare",
+      "vilka jobbar"
+    ]
+  },
+  {
+    "id": "page-butiker",
+    "synonyms": [
+      "butiker",
+      "våra butiker",
+      "butik",
+      "fysisk butik",
+      "var finns ni",
+      "öppettider",
+      "var ligger",
+      "stockholm",
+      "umeå",
+      "göteborg"
+    ]
+  },
+  {
+    "id": "page-tidsbokning",
+    "synonyms": [
+      "tidsbokning",
+      "boka tid",
+      "boka",
+      "rådgivning",
+      "konsultation",
+      "skoutprovning"
     ]
   }
 ]
