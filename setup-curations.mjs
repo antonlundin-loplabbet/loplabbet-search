@@ -120,6 +120,7 @@ const items = [
   //  MODELL-DISAMBIGUERING — tvingar namn-match före brand/popularity
   // ═══════════════════════════════════════════════════════════════════════
   { id: "model-vaporfly",      rule: { query: "vaporfly", match: "contains" },    filter_by: "name:`vaporfly`" },
+  { id: "model-alphafly",      rule: { query: "alphafly", match: "contains" },    filter_by: "name:`alphafly`" },
   { id: "model-pegasus",       rule: { query: "pegasus", match: "contains" },     filter_by: "name:`pegasus`" },
   { id: "model-bondi",         rule: { query: "bondi", match: "contains" },       filter_by: "name:`bondi`" },
   { id: "model-novablast",     rule: { query: "novablast", match: "contains" },   filter_by: "name:`novablast`" },
