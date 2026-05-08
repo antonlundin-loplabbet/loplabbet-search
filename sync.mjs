@@ -1,24 +1,20 @@
 /**
- * sync.mjs
+ * sync.mjs (v2 — fixad ID-matchning)
  * Hämtar Prisjakt-feed + Noselake API, slår ihop och synkar till Typesense.
  *
- * Kör manuellt:
- *   TYPESENSE_HOST=xxx TYPESENSE_ADMIN_KEY=xxx node sync.mjs
- *
- * Körs automatiskt via GitHub Actions varje natt kl 03:00.
+ * Fix mot tidigare version: Prisjakts item_group_id och Noselakes itemnumber
+ * matchade inte alls (bara 36/3582 träffade). Nu normaliseras båda till
+ * en gemensam nyckel + vi loggar matchningsstatistik.
  */
 
 import { XMLParser } from "fast-xml-parser";
 
-// ── Konfiguration ──────────────────────────────────────────────────────────
 const TYPESENSE_HOST = process.env.TYPESENSE_HOST;
 const TYPESENSE_KEY = process.env.TYPESENSE_ADMIN_KEY;
 const COLLECTION = "products";
 
-const PRISJAKT_URL =
-  "https://cdn.intersport.se/pricefiles/v2/loplabbet-prisjakt-v1.xml";
-const NOSELAKE_URL =
-  "https://services.intersport.se/api/noselake/searcher/website";
+const PRISJAKT_URL = "https://cdn.intersport.se/pricefiles/v2/loplabbet-prisjakt-v1.xml";
+const NOSELAKE_URL = "https://services.intersport.se/api/noselake/searcher/website";
 const NOSELAKE_PAGE_SIZE = 100;
 
 if (!TYPESENSE_HOST || !TYPESENSE_KEY) {
@@ -31,21 +27,47 @@ const tsHeaders = {
   "X-TYPESENSE-API-KEY": TYPESENSE_KEY,
 };
 
+// ── Nyckelnormalisering (NYTT) ─────────────────────────────────────────────
+// Båda källorna kan ha ID:n i olika format:
+//   Noselake itemnumber: "159653301"  (9 siffror — modell + färg)
+//   Prisjakt item_group_id: kanske "1596533", "1596533-01", "1596533/01"
+//
+// Vi tar bort allt utom siffror och returnerar en lista av kandidater så
+// matchningen funkar oavsett format. Den första som ger träff vinner.
+function makeKeyCandidates(rawId) {
+  const onlyDigits = String(rawId ?? "").replace(/\D/g, "");
+  if (!onlyDigits) return [];
+
+  const candidates = [onlyDigits];
+  // Om 9 siffror → testa även första 7 (modell utan färg)
+  if (onlyDigits.length === 9) {
+    candidates.push(onlyDigits.slice(0, 7));
+  }
+  // Om 7 siffror → testa även med "01" tillagt (default färg)
+  if (onlyDigits.length === 7) {
+    candidates.push(onlyDigits + "01");
+  }
+  return candidates;
+}
+
 // ── 1. Hämta Prisjakt-feed ─────────────────────────────────────────────────
 async function fetchPrisjaktFeed() {
   console.log("📥  Hämtar Prisjakt-feed...");
   const res = await fetch(PRISJAKT_URL);
   if (!res.ok) throw new Error(`Prisjakt fetch failed: ${res.status}`);
   const xml = await res.text();
-
   const parser = new XMLParser({ ignoreAttributes: false });
   const parsed = parser.parse(xml);
   const items = parsed?.items?.item ?? [];
   console.log(`    ${items.length} rader hämtade.`);
+  // DEBUG: visa exempel på item_group_id för att verifiera format
+  if (items.length > 0) {
+    const samples = items.slice(0, 3).map(i => i.item_group_id);
+    console.log(`    🔎 Prisjakt item_group_id-exempel: ${JSON.stringify(samples)}`);
+  }
   return items;
 }
 
-// ── 2. Gruppera Prisjakt per item_group_id ─────────────────────────────────
 function groupPrisjaktItems(items) {
   const groups = new Map();
 
@@ -53,12 +75,10 @@ function groupPrisjaktItems(items) {
     const gid = String(item.item_group_id);
 
     if (!groups.has(gid)) {
-      // Rensa pris-strängar: "2099 SEK" → 2099
       const price = parseFloat(String(item.price).replace(/[^\d.]/g, ""));
       const saleStr = String(item.sale_price ?? "").replace(/[^\d.]/g, "");
       const salePrice = saleStr ? parseFloat(saleStr) : null;
 
-      // Kategorier: "Löparskor_Terräng" → ["Löparskor", "Terräng"]
       const [category, subcategory] = String(item.product_type ?? "")
         .split("_")
         .map((s) => s.trim());
@@ -78,7 +98,7 @@ function groupPrisjaktItems(items) {
             ? Math.round(((price - salePrice) / price) * 100)
             : null,
         image_url: String(item.image_link ?? ""),
-        product_url: String(item.link ?? "").replace(/\/\d+$/, ""), // ta bort sista /storlek
+        product_url: String(item.link ?? "").replace(/\/\d+$/, ""),
         available_sizes: [],
         in_stock: false,
       });
@@ -97,7 +117,7 @@ function groupPrisjaktItems(items) {
   return groups;
 }
 
-// ── 3. Hämta alla Noselake-produkter (paginerat) ───────────────────────────
+// ── 3. Hämta Noselake ──────────────────────────────────────────────────────
 async function fetchAllNoselake() {
   console.log("📥  Hämtar Noselake-API (alla sidor)...");
   const allDocs = [];
@@ -114,113 +134,119 @@ async function fetchAllNoselake() {
 
     const total = json?.data?.stats?.totalHits ?? 0;
     from += NOSELAKE_PAGE_SIZE;
-
     process.stdout.write(`\r    ${allDocs.length} / ${total} produkter...`);
-
     if (from >= total) break;
-
-    // Kort paus för att inte hammra API:et
     await sleep(150);
   }
 
   console.log(`\n    ✅  ${allDocs.length} Noselake-produkter hämtade.`);
+
+  // DEBUG: visa exempel på itemnumber
+  if (allDocs.length > 0) {
+    const samples = allDocs.slice(0, 3).map(d => d.itemnumber);
+    console.log(`    🔎 Noselake itemnumber-exempel: ${JSON.stringify(samples)}`);
+  }
   return allDocs;
 }
 
-// ── 4. Bygg Noselake-lookup map ─────────────────────────────────────────────
+// ── 4. Bygg multi-key Noselake-map ─────────────────────────────────────────
+// Lägger samma doc under flera nycklar för att maximera träff
 function buildNoselakeMap(docs) {
   const map = new Map();
   for (const doc of docs) {
-    const key = String(doc.itemnumber ?? "").trim();
-    if (key) map.set(key, doc);
+    const candidates = makeKeyCandidates(doc.itemnumber);
+    for (const key of candidates) {
+      // Behåll första matchning per nyckel (specifika 9-siffror har företräde)
+      if (!map.has(key)) map.set(key, doc);
+    }
   }
+  console.log(`    Noselake-map byggd med ${map.size} nyckelvarianter från ${docs.length} produkter.`);
   return map;
 }
 
-// ── 5. Slå ihop Prisjakt + Noselake ────────────────────────────────────────
+// ── 5. Slå ihop ────────────────────────────────────────────────────────────
 function mergeProducts(prisjaktGroups, noselakeMap) {
   const merged = [];
+  let matchedCount = 0;
+  const unmatchedSamples = [];
 
   for (const [gid, product] of prisjaktGroups) {
-    const nl = noselakeMap.get(gid);
+    // Testa flera nyckelkandidater
+    const candidates = makeKeyCandidates(gid);
+    let nl = null;
+    for (const key of candidates) {
+      if (noselakeMap.has(key)) { nl = noselakeMap.get(key); break; }
+    }
 
     if (nl) {
-      // Berika med Noselake-data
+      matchedCount++;
       product.description = String(nl.description ?? "").substring(0, 2000);
       product.popularity = parseFloat(nl.popularity ?? "0") || 0;
 
-      // Dynamiska facetter (Drop, Stabilitet, Dämpning, Läst)
       const rawFacets = nl.dynamic_facets ?? [];
       const facets = Array.isArray(rawFacets) ? rawFacets : [rawFacets];
       for (const f of facets) {
         switch (f.filterkey) {
-          case "Drop":
-            product.drop = String(f.filtervalue);
-            break;
-          case "Stabilitet":
-            product.stability = String(f.filtervalue);
-            break;
-          case "Dämpning":
-            product.cushioning = String(f.filtervalue);
-            break;
-          case "Läst":
-            product.last_width = String(f.filtervalue);
-            break;
+          case "Drop":       product.drop = String(f.filtervalue); break;
+          case "Stabilitet": product.stability = String(f.filtervalue); break;
+          case "Dämpning":   product.cushioning = String(f.filtervalue); break;
+          case "Läst":       product.last_width = String(f.filtervalue); break;
         }
       }
 
-      // Vikt
       const weightFacet = nl.dynamic_range_facets;
       if (weightFacet?.filterkey === "Vikt") {
         product.weight_grams = parseInt(weightFacet.filtervalue) || null;
       }
 
-      // Färger
       const colors = (nl.colors ?? [])
         .map((c) => c.name)
         .filter(Boolean)
         .filter((v, i, a) => a.indexOf(v) === i);
       if (colors.length) product.colors = colors;
 
-      // Bättre produktnamn från Noselake om tillgängligt
       if (nl.commercialname) {
         product.name = String(nl.commercialname).trim();
       }
     } else {
-      // Ingen Noselake-matchning — sätt defaults
       product.description = product.name;
       product.popularity = 0;
+      if (unmatchedSamples.length < 5) {
+        unmatchedSamples.push({ gid, candidates, name: product.name });
+      }
     }
 
     merged.push(product);
   }
 
-  console.log(
-    `    Matchade: ${merged.filter((p) => p.description !== p.name).length} / ${merged.length} produkter berikade med Noselake.`
-  );
+  console.log(`\n📊  Matchningsstatistik:`);
+  console.log(`    ✅  Berikade med Noselake-data: ${matchedCount} / ${merged.length}`);
+  console.log(`    ❌  Ej matchade: ${merged.length - matchedCount}`);
+  if (unmatchedSamples.length > 0) {
+    console.log(`    🔎 Exempel på ej matchade Prisjakt-ID:n:`);
+    for (const s of unmatchedSamples) {
+      console.log(`         "${s.gid}" (kandidater: ${JSON.stringify(s.candidates)}) — ${s.name}`);
+    }
+  }
+
   return merged;
 }
 
-// ── 6. Upserta till Typesense i batchar ────────────────────────────────────
+// ── 6. Upsert ──────────────────────────────────────────────────────────────
 async function upsertToTypesense(products) {
   console.log(`\n📤  Synkar ${products.length} produkter till Typesense...`);
-
   const BATCH = 250;
-  let ok = 0;
-  let fail = 0;
+  let ok = 0, fail = 0;
 
   for (let i = 0; i < products.length; i += BATCH) {
     const batch = products.slice(i, i + BATCH);
     const ndjson = batch.map((p) => JSON.stringify(p)).join("\n");
-
     const res = await fetch(
       `https://${TYPESENSE_HOST}/collections/${COLLECTION}/documents/import?action=upsert`,
       { method: "POST", headers: tsHeaders, body: ndjson }
     );
-
     const text = await res.text();
     const lines = text.trim().split("\n");
-
     for (const line of lines) {
       try {
         const r = JSON.parse(line);
@@ -230,21 +256,15 @@ async function upsertToTypesense(products) {
         fail++;
       }
     }
-
-    process.stdout.write(
-      `\r    ${Math.min(i + BATCH, products.length)} / ${products.length} (✅ ${ok} ❌ ${fail})`
-    );
+    process.stdout.write(`\r    ${Math.min(i + BATCH, products.length)} / ${products.length} (✅ ${ok} ❌ ${fail})`);
   }
-
   console.log(`\n\n─────────────────────────────────`);
   console.log(`✅  Lyckades:     ${ok}`);
   console.log(`❌  Misslyckades: ${fail}`);
   console.log(`─────────────────────────────────`);
 }
 
-// ── Hjälpfunktioner ────────────────────────────────────────────────────────
 function cleanTitle(title) {
-  // Ta bort storleksinformation på slutet: "... XL" eller "... EU 42"
   return String(title ?? "")
     .replace(/\s+(XS|S|M|L|XL|2XL|3XL|\d{2,3}(\.\d+)?)\s*$/i, "")
     .trim();
@@ -257,13 +277,10 @@ function normalizeGender(g) {
   return "Unisex";
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-// ── Main ───────────────────────────────────────────────────────────────────
 async function main() {
-  console.log("🚀  Löplabbet Typesense Sync startar...\n");
+  console.log("🚀  Löplabbet Typesense Sync v2 startar...\n");
   const t0 = Date.now();
 
   const [prisjaktItems, noselakeDocs] = await Promise.all([
@@ -283,7 +300,4 @@ async function main() {
   console.log(`\n⏱️   Klar på ${elapsed}s`);
 }
 
-main().catch((err) => {
-  console.error("💥  Oväntat fel:", err);
-  process.exit(1);
-});
+main().catch((err) => { console.error("💥  Oväntat fel:", err); process.exit(1); });
