@@ -84,6 +84,8 @@ function groupPrisjaktItems(items) {
         .split("_")
         .map((s) => s.trim());
 
+      const shoeType = deriveShoeType(item.title);
+
       groups.set(gid, {
         id: gid,
         name: cleanTitle(item.title),
@@ -91,6 +93,7 @@ function groupPrisjaktItems(items) {
         gender: normalizeGender(item.gender),
         category: category ?? "",
         subcategory: subcategory ?? "",
+        shoe_type: shoeType,
         price,
         sale_price: salePrice,
         on_sale: salePrice !== null && salePrice < price,
@@ -278,6 +281,18 @@ function normalizeGender(g) {
   if (s.includes("dam") || s.includes("women")) return "Dam";
   if (s.includes("herr") || s.includes("men")) return "Herr";
   return "Unisex";
+}
+
+// Härleder skotyp från namn-suffix (Anton's namnkonvention).
+// Returnerar tom sträng för icke-skor — möjliggör strikta filter
+// som "shoe_type:=Tävling" utan att dra in löparbälten/klockor/kläder.
+function deriveShoeType(title) {
+  const upper = String(title ?? "").toUpperCase();
+  if (upper.endsWith("KOLFIBERSKOR"))   return "Tävling";
+  if (upper.endsWith("TRAILSKOR"))      return "Trail";
+  if (upper.endsWith("PROMENADSKOR"))   return "Promenad";
+  if (upper.endsWith("LÖPARSKOR"))      return "Löpning";
+  return "";
 }
 
 async function main() {

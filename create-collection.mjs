@@ -38,6 +38,7 @@ const schema = {
     // ── Kategorier ─────────────────────────────────────────────────
     { name: "category", type: "string", facet: true },     // t.ex. "Löparskor"
     { name: "subcategory", type: "string", facet: true },  // t.ex. "Terräng"
+    { name: "shoe_type", type: "string", facet: true, optional: true }, // Härleds från namn-suffix: Tävling/Trail/Promenad/Löpning
 
     // ── Priser ─────────────────────────────────────────────────────
     { name: "price", type: "float" },

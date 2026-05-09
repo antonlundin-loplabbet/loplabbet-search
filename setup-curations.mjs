@@ -61,6 +61,25 @@ if (!TYPESENSE_HOST || !TYPESENSE_KEY) {
 
 const items = [
   // ═══════════════════════════════════════════════════════════════════════
+  //  SKOTYP-FILTER (shoe_type från namn-suffix)
+  //  Säkerställer att begreppssökningar bara returnerar skor, inte
+  //  löparbälten/klockor/kläder med liknande ord i namnet.
+  // ═══════════════════════════════════════════════════════════════════════
+  { id: "shoetype-tavling",      rule: { query: "tävling", match: "contains" },      filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-tavlingssko",  rule: { query: "tävlingssko", match: "contains" },  filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-tavlingsskor", rule: { query: "tävlingsskor", match: "contains" }, filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-kolfiber",     rule: { query: "kolfiber", match: "contains" },     filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-kolfibersko",  rule: { query: "kolfibersko", match: "contains" },  filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-kolfiberskor", rule: { query: "kolfiberskor", match: "contains" }, filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-racingsko",    rule: { query: "racingsko", match: "contains" },    filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-racingskor",   rule: { query: "racingskor", match: "contains" },   filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-trail",        rule: { query: "trailsko", match: "contains" },     filter_by: "shoe_type:=`Trail`" },
+  { id: "shoetype-trailskor",    rule: { query: "trailskor", match: "contains" },    filter_by: "shoe_type:=`Trail`" },
+  { id: "shoetype-terrang",      rule: { query: "terrängsko", match: "contains" },   filter_by: "shoe_type:=`Trail`" },
+  { id: "shoetype-promenad",     rule: { query: "promenadsko", match: "contains" },  filter_by: "shoe_type:=`Promenad`" },
+  { id: "shoetype-promenadskor", rule: { query: "promenadskor", match: "contains" }, filter_by: "shoe_type:=`Promenad`" },
+
+  // ═══════════════════════════════════════════════════════════════════════
   //  DROP — numeriskt range-filter (synonymer kan inte göra detta)
   // ═══════════════════════════════════════════════════════════════════════
   { id: "concept-lagt-drop",   rule: { query: "lågt drop", match: "contains" },   filter_by: "drop:=[`0`,`1`,`2`,`3`,`4`]" },
