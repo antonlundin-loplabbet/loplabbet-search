@@ -54,12 +54,19 @@ if (!TYPESENSE_HOST || !TYPESENSE_KEY) {
 //   3. Sort-overrides           ("bästsäljare", "billigast")
 //   4. Disambiguering           (vaporfly vs alphafly, On vs ord med "on")
 //
-// Tidigare hade vi även filter för subcategory/stabilitet/dämpning/bredd/
-// kön, men de skapade konflikter med synonym-expansionen och returnerade
-// 0 träffar i flera fall. Synonymerna i `typesense-synonyms.json` täcker
-// dessa via textmatchning istället, vilket är mer förlåtande.
+// Vissa tydliga köpintenter filtreras hårt (kön, passform, dämpning,
+// stabilitet). Det ger bättre resultat än ren synonym-expansion när
+// facettvärdena finns i indexet.
 
 const RACE_FILTER = "(shoe_type:=`Tävling` || name:`KOLFIBERSKOR` || name:`TÄVLINGSSKOR` || name:`RACINGSKOR`)";
+const DAM_FILTER = "gender:=[`Dam`,`Unisex`]";
+const HERR_FILTER = "gender:=[`Herr`,`Unisex`]";
+const BRED_FILTER = "last_width:=[`Bred`,`Extra bred`]";
+const SMAL_FILTER = "last_width:=`Smal`";
+const MJUK_FILTER = "cushioning:=`Mjuk`";
+const FAST_FILTER = "cushioning:=`Fast`";
+const STABIL_FILTER = "stability:=`Stabil`";
+const NEUTRAL_FILTER = "stability:=[`Flexibel`,`Medium`]";
 
 const items = [
   // ═══════════════════════════════════════════════════════════════════════
@@ -83,6 +90,30 @@ const items = [
   { id: "shoetype-terrang",      rule: { query: "terrängsko", match: "contains" },   filter_by: "shoe_type:=`Trail`" },
   { id: "shoetype-promenad",     rule: { query: "promenadsko", match: "contains" },  filter_by: "shoe_type:=`Promenad`" },
   { id: "shoetype-promenadskor", rule: { query: "promenadskor", match: "contains" }, filter_by: "shoe_type:=`Promenad`" },
+
+  // Kön
+  { id: "concept-dam",           rule: { query: "dam", match: "contains" },          filter_by: DAM_FILTER },
+  { id: "concept-damskor",       rule: { query: "damskor", match: "contains" },      filter_by: DAM_FILTER },
+  { id: "concept-women",         rule: { query: "women", match: "contains" },        filter_by: DAM_FILTER },
+  { id: "concept-herr",          rule: { query: "herr", match: "contains" },         filter_by: HERR_FILTER },
+  { id: "concept-herrskor",      rule: { query: "herrskor", match: "contains" },     filter_by: HERR_FILTER },
+
+  // Passform, dämpning och stabilitet
+  { id: "concept-bred",          rule: { query: "bred", match: "contains" },          filter_by: BRED_FILTER },
+  { id: "concept-bred-passform", rule: { query: "bred passform", match: "contains" }, filter_by: BRED_FILTER },
+  { id: "concept-bred-fot",      rule: { query: "bred fot", match: "contains" },      filter_by: BRED_FILTER },
+  { id: "concept-wide-fit",      rule: { query: "wide fit", match: "contains" },      filter_by: BRED_FILTER },
+  { id: "concept-smal",          rule: { query: "smal", match: "contains" },          filter_by: SMAL_FILTER },
+  { id: "concept-smal-passform", rule: { query: "smal passform", match: "contains" }, filter_by: SMAL_FILTER },
+  { id: "concept-smal-fot",      rule: { query: "smal fot", match: "contains" },      filter_by: SMAL_FILTER },
+  { id: "concept-mjuk-sko",      rule: { query: "mjuk", match: "contains" },          filter_by: MJUK_FILTER },
+  { id: "concept-mjuk",          rule: { query: "mjuk dämpning", match: "contains" }, filter_by: MJUK_FILTER },
+  { id: "concept-maxdampad",     rule: { query: "max dämpning", match: "contains" },  filter_by: MJUK_FILTER },
+  { id: "concept-fast",          rule: { query: "fast dämpning", match: "contains" }, filter_by: FAST_FILTER },
+  { id: "concept-responsiv",     rule: { query: "responsiv", match: "contains" },     filter_by: FAST_FILTER },
+  { id: "concept-stabil",        rule: { query: "stabil", match: "contains" },        filter_by: STABIL_FILTER },
+  { id: "concept-pronation",     rule: { query: "pronation", match: "contains" },     filter_by: STABIL_FILTER },
+  { id: "concept-neutral",       rule: { query: "neutral", match: "contains" },       filter_by: NEUTRAL_FILTER },
 
   // ═══════════════════════════════════════════════════════════════════════
   //  DROP — numeriskt range-filter (synonymer kan inte göra detta)
@@ -145,11 +176,10 @@ const obsoleteIds = [
   "concept-tavling", "concept-distans", "concept-trail", "concept-marathon",
   "concept-daily", "concept-daily-2", "concept-tempo", "concept-intervaller",
   "concept-aterhamtning",
-  "concept-stabil", "concept-medium-stab", "concept-flexibel", "concept-neutral",
-  "concept-mjuk", "concept-mjuk-2", "concept-medel", "concept-lagom",
-  "concept-fast", "concept-fast-2",
-  "concept-bred-a-extra", "concept-bred-b-bred", "concept-bred-c-fot", "concept-smal",
-  "concept-dam", "concept-herr",
+  "concept-medium-stab", "concept-flexibel",
+  "concept-mjuk-2", "concept-medel", "concept-lagom",
+  "concept-fast-2",
+  "concept-bred-a-extra", "concept-bred-b-bred", "concept-bred-c-fot",
   "rank-nyhet", // tidigare experiment, sort_by release_date — fältet finns inte
 ];
 
