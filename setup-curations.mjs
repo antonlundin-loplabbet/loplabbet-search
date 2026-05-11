@@ -59,20 +59,25 @@ if (!TYPESENSE_HOST || !TYPESENSE_KEY) {
 // 0 träffar i flera fall. Synonymerna i `typesense-synonyms.json` täcker
 // dessa via textmatchning istället, vilket är mer förlåtande.
 
+const RACE_FILTER = "(shoe_type:=`Tävling` || name:`KOLFIBERSKOR` || name:`TÄVLINGSSKOR` || name:`RACINGSKOR`)";
+
 const items = [
   // ═══════════════════════════════════════════════════════════════════════
   //  SKOTYP-FILTER (shoe_type från namn-suffix)
   //  Säkerställer att begreppssökningar bara returnerar skor, inte
   //  löparbälten/klockor/kläder med liknande ord i namnet.
   // ═══════════════════════════════════════════════════════════════════════
-  { id: "shoetype-tavling",      rule: { query: "tävling", match: "contains" },      filter_by: "shoe_type:=`Tävling`" },
-  { id: "shoetype-tavlingssko",  rule: { query: "tävlingssko", match: "contains" },  filter_by: "shoe_type:=`Tävling`" },
-  { id: "shoetype-tavlingsskor", rule: { query: "tävlingsskor", match: "contains" }, filter_by: "shoe_type:=`Tävling`" },
-  { id: "shoetype-kolfiber",     rule: { query: "kolfiber", match: "contains" },     filter_by: "shoe_type:=`Tävling`" },
-  { id: "shoetype-kolfibersko",  rule: { query: "kolfibersko", match: "contains" },  filter_by: "shoe_type:=`Tävling`" },
-  { id: "shoetype-kolfiberskor", rule: { query: "kolfiberskor", match: "contains" }, filter_by: "shoe_type:=`Tävling`" },
-  { id: "shoetype-racingsko",    rule: { query: "racingsko", match: "contains" },    filter_by: "shoe_type:=`Tävling`" },
-  { id: "shoetype-racingskor",   rule: { query: "racingskor", match: "contains" },   filter_by: "shoe_type:=`Tävling`" },
+  { id: "shoetype-tavling",      rule: { query: "tävling", match: "contains" },      filter_by: RACE_FILTER },
+  { id: "shoetype-tavlingssko",  rule: { query: "tävlingssko", match: "contains" },  filter_by: RACE_FILTER },
+  { id: "shoetype-tavlingsko",   rule: { query: "tävlingsko", match: "contains" },   filter_by: RACE_FILTER },
+  { id: "shoetype-tavlingsskor", rule: { query: "tävlingsskor", match: "contains" }, filter_by: RACE_FILTER },
+  { id: "shoetype-kolfiber",     rule: { query: "kolfiber", match: "contains" },     filter_by: RACE_FILTER },
+  { id: "shoetype-kolfibersko",  rule: { query: "kolfibersko", match: "contains" },  filter_by: RACE_FILTER },
+  { id: "shoetype-kolfiberskor", rule: { query: "kolfiberskor", match: "contains" }, filter_by: RACE_FILTER },
+  { id: "shoetype-carbon",       rule: { query: "carbon", match: "contains" },       filter_by: RACE_FILTER },
+  { id: "shoetype-carbonsko",    rule: { query: "carbonsko", match: "contains" },    filter_by: RACE_FILTER },
+  { id: "shoetype-racingsko",    rule: { query: "racingsko", match: "contains" },    filter_by: RACE_FILTER },
+  { id: "shoetype-racingskor",   rule: { query: "racingskor", match: "contains" },   filter_by: RACE_FILTER },
   { id: "shoetype-trail",        rule: { query: "trailsko", match: "contains" },     filter_by: "shoe_type:=`Trail`" },
   { id: "shoetype-trailskor",    rule: { query: "trailskor", match: "contains" },    filter_by: "shoe_type:=`Trail`" },
   { id: "shoetype-terrang",      rule: { query: "terrängsko", match: "contains" },   filter_by: "shoe_type:=`Trail`" },
@@ -177,6 +182,34 @@ async function ensureCurationSet() {
   }
 }
 
+async function ensureShoeTypeField() {
+  console.log(`🔎  Kontrollerar att fältet "shoe_type" finns i "${COLLECTION}"...`);
+  const get = await tsRequest("GET", `/collections/${COLLECTION}`);
+  if (!get.ok) {
+    console.error(`   ❌  Kunde inte läsa collection: HTTP ${get.status}`);
+    return false;
+  }
+
+  const hasField = get.json?.fields?.some(f => f.name === "shoe_type");
+  if (hasField) {
+    console.log(`   ℹ️   Finns redan.`);
+    return true;
+  }
+
+  const patch = await tsRequest("PATCH", `/collections/${COLLECTION}`, {
+    fields: [
+      { name: "shoe_type", type: "string", facet: true, optional: true },
+    ],
+  });
+  if (!patch.ok) {
+    console.error(`   ❌  Kunde inte lägga till shoe_type: HTTP ${patch.status} — ${patch.text.slice(0, 200)}`);
+    return false;
+  }
+
+  console.log(`   ✅  Lade till shoe_type i schemat. Kör sync efter detta så befintliga dokument får värden.`);
+  return true;
+}
+
 // ── 1b. Radera obsoleta items ───────────────────────────────────────────────
 async function deleteObsolete() {
   console.log(`\n🗑️   Raderar ${obsoleteIds.length} obsoleta regler...`);
@@ -243,6 +276,9 @@ async function linkToCollection() {
 // ── Main ────────────────────────────────────────────────────────────────────
 async function main() {
   console.log(`🚀  Sätter ${items.length} curation rules på "${COLLECTION}" (Typesense v30)\n`);
+
+  const schemaOk = await ensureShoeTypeField();
+  if (!schemaOk) process.exit(1);
 
   await ensureCurationSet();
   await deleteObsolete();

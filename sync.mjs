@@ -84,7 +84,7 @@ function groupPrisjaktItems(items) {
         .split("_")
         .map((s) => s.trim());
 
-      const shoeType = deriveShoeType(item.title);
+      const shoeType = deriveShoeType(item.title, subcategory);
 
       groups.set(gid, {
         id: gid,
@@ -286,12 +286,24 @@ function normalizeGender(g) {
 // Härleder skotyp från namn-suffix (Anton's namnkonvention).
 // Returnerar tom sträng för icke-skor — möjliggör strikta filter
 // som "shoe_type:=Tävling" utan att dra in löparbälten/klockor/kläder.
-function deriveShoeType(title) {
+function deriveShoeType(title, subcategory = "") {
   const upper = String(title ?? "").toUpperCase();
-  if (upper.endsWith("KOLFIBERSKOR"))   return "Tävling";
-  if (upper.endsWith("TRAILSKOR"))      return "Trail";
-  if (upper.endsWith("PROMENADSKOR"))   return "Promenad";
-  if (upper.endsWith("LÖPARSKOR"))      return "Löpning";
+  const sub = String(subcategory ?? "").toUpperCase();
+
+  // Tävlingsskor kan heta både KOLFIBERSKOR i titel och ligga i
+  // subcategory=Tävling i feeden. Lita på båda så race-sök kan filtrera hårt.
+  if (
+    sub === "TÄVLING" ||
+    upper.endsWith("KOLFIBERSKOR") ||
+    upper.endsWith("TÄVLINGSSKOR") ||
+    upper.endsWith("TÄVLINGSSKO") ||
+    upper.endsWith("RACINGSKOR") ||
+    upper.includes("KOLFIBER")
+  ) return "Tävling";
+
+  if (sub === "TRAIL" || sub === "TERRÄNG" || upper.endsWith("TRAILSKOR")) return "Trail";
+  if (upper.endsWith("PROMENADSKOR")) return "Promenad";
+  if (upper.endsWith("LÖPARSKOR")) return "Löpning";
   return "";
 }
 

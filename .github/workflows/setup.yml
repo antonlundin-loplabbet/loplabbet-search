@@ -45,6 +45,12 @@ jobs:
           TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
         run: node import-synonyms.mjs
 
+      - name: Sätt curation rules
+        env:
+          TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
+          TYPESENSE_ADMIN_KEY: ${{ secrets.TYPESENSE_ADMIN_KEY }}
+        run: node setup-curations.mjs
+
       - name: Synka produkter
         env:
           TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
