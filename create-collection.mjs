@@ -43,6 +43,8 @@ const schema = {
     // ── Priser ─────────────────────────────────────────────────────
     { name: "price", type: "float" },
     { name: "sale_price", type: "float", optional: true },
+    { name: "member_price", type: "float", optional: true },
+    { name: "is_member_price", type: "bool", facet: true, optional: true },
     { name: "on_sale", type: "bool", facet: true },
     { name: "discount_percent", type: "int32", optional: true },
 

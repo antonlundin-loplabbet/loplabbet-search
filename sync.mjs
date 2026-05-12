@@ -28,6 +28,11 @@ const tsHeaders = {
   "X-TYPESENSE-API-KEY": TYPESENSE_KEY,
 };
 
+const tsJsonHeaders = {
+  "Content-Type": "application/json",
+  "X-TYPESENSE-API-KEY": TYPESENSE_KEY,
+};
+
 // ── Nyckelnormalisering (NYTT) ─────────────────────────────────────────────
 // Båda källorna kan ha ID:n i olika format:
 //   Noselake itemnumber: "159653301"  (9 siffror — modell + färg)
@@ -74,12 +79,16 @@ function groupPrisjaktItems(items) {
 
   for (const item of items) {
     const gid = String(item.item_group_id);
+    const price = parsePrice(item.price);
+    const salePrice = parsePrice(item.sale_price);
+    const memberPrice = parsePrice(item.member_price);
+    const isMemberPrice =
+      memberPrice !== null &&
+      salePrice !== null &&
+      memberPrice === salePrice &&
+      memberPrice < price;
 
     if (!groups.has(gid)) {
-      const price = parseFloat(String(item.price).replace(/[^\d.]/g, ""));
-      const saleStr = String(item.sale_price ?? "").replace(/[^\d.]/g, "");
-      const salePrice = saleStr ? parseFloat(saleStr) : null;
-
       const [category, subcategory] = String(item.product_type ?? "")
         .split("_")
         .map((s) => s.trim());
@@ -96,6 +105,8 @@ function groupPrisjaktItems(items) {
         shoe_type: shoeType,
         price,
         sale_price: salePrice,
+        member_price: memberPrice,
+        is_member_price: isMemberPrice,
         on_sale: salePrice !== null && salePrice < price,
         discount_percent:
           salePrice && price
@@ -112,6 +123,11 @@ function groupPrisjaktItems(items) {
     const size = String(item.size ?? "").trim();
     const inStock = String(item.availability) === "in_stock";
 
+    if (isMemberPrice) {
+      group.member_price = memberPrice;
+      group.is_member_price = true;
+    }
+
     if (size && size !== "ONESIZE" && !group.available_sizes.includes(size)) {
       group.available_sizes.push(size);
     }
@@ -119,6 +135,13 @@ function groupPrisjaktItems(items) {
   }
 
   return groups;
+}
+
+function parsePrice(value) {
+  const str = String(value ?? "").replace(/[^\d.,]/g, "").replace(",", ".");
+  if (!str) return null;
+  const parsed = parseFloat(str);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 // ── 3. Hämta Noselake ──────────────────────────────────────────────────────
@@ -270,6 +293,42 @@ async function upsertToTypesense(products) {
   console.log(`─────────────────────────────────`);
 }
 
+async function ensureProductSchemaFields() {
+  console.log(`\n🔎  Kontrollerar prisfält i "${COLLECTION}"...`);
+  const get = await fetch(`https://${TYPESENSE_HOST}/collections/${COLLECTION}`, {
+    headers: tsJsonHeaders,
+  });
+  if (!get.ok) {
+    throw new Error(`Kunde inte läsa collection ${COLLECTION}: HTTP ${get.status}`);
+  }
+
+  const data = await get.json();
+  const existing = new Set((data.fields || []).map((f) => f.name));
+  const fields = [];
+  if (!existing.has("member_price")) {
+    fields.push({ name: "member_price", type: "float", optional: true });
+  }
+  if (!existing.has("is_member_price")) {
+    fields.push({ name: "is_member_price", type: "bool", facet: true, optional: true });
+  }
+
+  if (!fields.length) {
+    console.log("    ℹ️  member_price/is_member_price finns redan.");
+    return;
+  }
+
+  const patch = await fetch(`https://${TYPESENSE_HOST}/collections/${COLLECTION}`, {
+    method: "PATCH",
+    headers: tsJsonHeaders,
+    body: JSON.stringify({ fields }),
+  });
+  const text = await patch.text();
+  if (!patch.ok) {
+    throw new Error(`Kunde inte lägga till prisfält: HTTP ${patch.status} ${text.slice(0, 200)}`);
+  }
+  console.log(`    ✅  Lade till: ${fields.map((f) => f.name).join(", ")}`);
+}
+
 function cleanTitle(title) {
   return String(title ?? "")
     .replace(/\s+(XS|S|M|L|XL|2XL|3XL|\d{2,3}(\.\d+)?)\s*$/i, "")
@@ -322,6 +381,7 @@ async function main() {
   const noselakeMap = buildNoselakeMap(noselakeDocs);
   const products = mergeProducts(prisjaktGroups, noselakeMap);
 
+  await ensureProductSchemaFields();
   await upsertToTypesense(products);
 
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
