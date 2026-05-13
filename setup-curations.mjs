@@ -100,9 +100,12 @@ const items = [
 
   // Passform, dämpning och stabilitet
   { id: "concept-bred",          rule: { query: "bred", match: "contains" },          filter_by: BRED_FILTER },
+  { id: "concept-breda",         rule: { query: "breda", match: "contains" },         filter_by: BRED_FILTER },
+  { id: "concept-breda-skor",    rule: { query: "breda skor", match: "contains" },    filter_by: BRED_FILTER },
   { id: "concept-bred-passform", rule: { query: "bred passform", match: "contains" }, filter_by: BRED_FILTER },
   { id: "concept-bred-fot",      rule: { query: "bred fot", match: "contains" },      filter_by: BRED_FILTER },
   { id: "concept-wide-fit",      rule: { query: "wide fit", match: "contains" },      filter_by: BRED_FILTER },
+  { id: "concept-extra-bred",    rule: { query: "extra bred", match: "contains" },    filter_by: BRED_FILTER },
   { id: "concept-smal",          rule: { query: "smal", match: "contains" },          filter_by: SMAL_FILTER },
   { id: "concept-smal-passform", rule: { query: "smal passform", match: "contains" }, filter_by: SMAL_FILTER },
   { id: "concept-smal-fot",      rule: { query: "smal fot", match: "contains" },      filter_by: SMAL_FILTER },
