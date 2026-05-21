@@ -73,6 +73,11 @@ function collectArticleNumbers(...values) {
   return [...numbers];
 }
 
+function getProductBaseArticleNumber(url) {
+  const match = String(url ?? "").match(/\/product\/(\d+)/);
+  return match ? match[1] : "";
+}
+
 // ── 1. Hämta Prisjakt-feed ─────────────────────────────────────────────────
 async function fetchPrisjaktFeed() {
   console.log("📥  Hämtar Prisjakt-feed...");
@@ -96,6 +101,8 @@ function groupPrisjaktItems(items) {
 
   for (const item of items) {
     const gid = String(item.item_group_id);
+    const productBaseArticleNumber = getProductBaseArticleNumber(item.link);
+    const supplierArticleNumber = String(item.mpn ?? "").trim();
     const price = parsePrice(item.price);
     const salePrice = parsePrice(item.sale_price);
     const memberPrice = parsePrice(item.member_price);
@@ -114,9 +121,10 @@ function groupPrisjaktItems(items) {
 
       groups.set(gid, {
         id: gid,
-        internal_article_number: gid,
-        supplier_article_number: "",
+        internal_article_number: productBaseArticleNumber || gid,
+        supplier_article_number: supplierArticleNumber,
         article_numbers: collectArticleNumbers(
+          productBaseArticleNumber,
           gid,
           item.id,
           item.item_id,
@@ -151,6 +159,12 @@ function groupPrisjaktItems(items) {
     const group = groups.get(gid);
     const size = String(item.size ?? "").trim();
     const inStock = String(item.availability) === "in_stock";
+    if (productBaseArticleNumber && !group.internal_article_number) {
+      group.internal_article_number = productBaseArticleNumber;
+    }
+    if (supplierArticleNumber && !group.supplier_article_number) {
+      group.supplier_article_number = supplierArticleNumber;
+    }
 
     if (isMemberPrice) {
       group.member_price = memberPrice;
@@ -161,6 +175,7 @@ function groupPrisjaktItems(items) {
       group.available_sizes.push(size);
     }
     const articleNumbers = collectArticleNumbers(
+      productBaseArticleNumber,
       item.id,
       item.item_id,
       item.item_group_id,
@@ -250,7 +265,6 @@ function mergeProducts(prisjaktGroups, noselakeMap) {
 
     if (nl) {
       matchedCount++;
-      product.supplier_article_number = String(nl.itemnumber ?? "").trim();
       for (const number of collectArticleNumbers(nl.itemnumber)) {
         if (!product.article_numbers.includes(number)) product.article_numbers.push(number);
       }

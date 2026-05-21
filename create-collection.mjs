@@ -31,6 +31,9 @@ const schema = {
   fields: [
     // ── Identifiering ──────────────────────────────────────────────
     { name: "id", type: "string" },               // item_group_id / itemnumber
+    { name: "internal_article_number", type: "string", optional: true },
+    { name: "supplier_article_number", type: "string", optional: true },
+    { name: "article_numbers", type: "string[]", optional: true },
     { name: "name", type: "string", infix: true },             // Produktnamn (commercialname)
     { name: "brand", type: "string", facet: true, infix: true },
     { name: "gender", type: "string", facet: true },
