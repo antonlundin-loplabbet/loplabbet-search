@@ -56,6 +56,23 @@ function makeKeyCandidates(rawId) {
   return candidates;
 }
 
+function addArticleNumber(target, value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return;
+  target.add(raw);
+  const digits = raw.replace(/\D/g, "");
+  if (digits) {
+    target.add(digits);
+    for (const candidate of makeKeyCandidates(digits)) target.add(candidate);
+  }
+}
+
+function collectArticleNumbers(...values) {
+  const numbers = new Set();
+  for (const value of values) addArticleNumber(numbers, value);
+  return [...numbers];
+}
+
 // ── 1. Hämta Prisjakt-feed ─────────────────────────────────────────────────
 async function fetchPrisjaktFeed() {
   console.log("📥  Hämtar Prisjakt-feed...");
@@ -97,6 +114,18 @@ function groupPrisjaktItems(items) {
 
       groups.set(gid, {
         id: gid,
+        internal_article_number: gid,
+        supplier_article_number: "",
+        article_numbers: collectArticleNumbers(
+          gid,
+          item.id,
+          item.item_id,
+          item.item_group_id,
+          item.sku,
+          item.mpn,
+          item.gtin,
+          item.ean
+        ),
         name: cleanTitle(item.title),
         brand: String(item.brand ?? "").trim(),
         gender: normalizeGender(item.gender),
@@ -130,6 +159,18 @@ function groupPrisjaktItems(items) {
 
     if (size && size !== "ONESIZE" && !group.available_sizes.includes(size)) {
       group.available_sizes.push(size);
+    }
+    const articleNumbers = collectArticleNumbers(
+      item.id,
+      item.item_id,
+      item.item_group_id,
+      item.sku,
+      item.mpn,
+      item.gtin,
+      item.ean
+    );
+    for (const number of articleNumbers) {
+      if (!group.article_numbers.includes(number)) group.article_numbers.push(number);
     }
     if (inStock) group.in_stock = true;
   }
@@ -209,6 +250,10 @@ function mergeProducts(prisjaktGroups, noselakeMap) {
 
     if (nl) {
       matchedCount++;
+      product.supplier_article_number = String(nl.itemnumber ?? "").trim();
+      for (const number of collectArticleNumbers(nl.itemnumber)) {
+        if (!product.article_numbers.includes(number)) product.article_numbers.push(number);
+      }
       product.description = String(nl.description ?? "").substring(0, 2000);
       product.popularity = parseFloat(nl.popularity ?? "0") || 0;
 
@@ -294,7 +339,7 @@ async function upsertToTypesense(products) {
 }
 
 async function ensureProductSchemaFields() {
-  console.log(`\n🔎  Kontrollerar prisfält i "${COLLECTION}"...`);
+  console.log(`\n🔎  Kontrollerar schemafält i "${COLLECTION}"...`);
   const get = await fetch(`https://${TYPESENSE_HOST}/collections/${COLLECTION}`, {
     headers: tsJsonHeaders,
   });
@@ -311,9 +356,18 @@ async function ensureProductSchemaFields() {
   if (!existing.has("is_member_price")) {
     fields.push({ name: "is_member_price", type: "bool", facet: true, optional: true });
   }
+  if (!existing.has("internal_article_number")) {
+    fields.push({ name: "internal_article_number", type: "string", optional: true });
+  }
+  if (!existing.has("supplier_article_number")) {
+    fields.push({ name: "supplier_article_number", type: "string", optional: true });
+  }
+  if (!existing.has("article_numbers")) {
+    fields.push({ name: "article_numbers", type: "string[]", optional: true });
+  }
 
   if (!fields.length) {
-    console.log("    ℹ️  member_price/is_member_price finns redan.");
+    console.log("    ℹ️  Schemafälten finns redan.");
     return;
   }
 
