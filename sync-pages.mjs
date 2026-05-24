@@ -17,6 +17,9 @@ const TYPESENSE_KEY = process.env.TYPESENSE_ADMIN_KEY;
 const COLLECTION = "pages";
 
 const SITEMAP_URL = "https://www.loplabbet.se/sitemap.xml";
+const EXTRA_URLS = [
+  "https://www.loplabbet.se/produktguider/super-trainer/asics-superblast-3",
+];
 
 // ─────────────────────────────────────────────────────────────────────────
 // WHITELIST + SEKTIONS-ETIKETTER
@@ -107,6 +110,18 @@ function filterUrls(urls) {
   }
 
   return filtered;
+}
+
+function addExtraUrls(urls) {
+  const seen = new Set(urls.map(item => item.url));
+  const lastmod = Math.floor(Date.now() / 1000);
+  for (const url of EXTRA_URLS) {
+    if (!seen.has(url)) {
+      urls.push({ url, lastmod });
+      seen.add(url);
+    }
+  }
+  return urls;
 }
 
 // ── 3. Hämta och parsa enskild sida ────────────────────────────────────────
@@ -227,7 +242,7 @@ async function main() {
   console.log("🚀  Löplabbet Pages Sync v5.1 startar...\n");
   const t0 = Date.now();
 
-  const sitemapUrls = await fetchSitemap();
+  const sitemapUrls = addExtraUrls(await fetchSitemap());
   const filtered = filterUrls(sitemapUrls);
   const pages = await fetchAllPages(filtered);
   await upsertToTypesense(pages);
